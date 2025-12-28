@@ -1,28 +1,29 @@
 # Trivy Ignore File
 # =================
 # Backend Python dependencies - deferred until backend deployment
-# LangChain upgrades require breaking changes (0.0.x -> 0.2.x migration)
 # These will be addressed when backend CI/CD is implemented
 #
 # Review date: 2024-12-28
 # Next review: Before backend deployment
 
 # LangChain ecosystem - breaking API changes between versions
-# Upgrade path: https://python.langchain.com/docs/versions/v0_2/
-CVE-2024-28088    # langchain-community - ReAct agent prompt injection
-CVE-2024-0243     # langchain-core - prompt injection  
-CVE-2024-1455     # langchain - arbitrary code execution
-CVE-2024-3095     # langchain - PALChain code execution
-CVE-2024-5998     # langchain-experimental - XXE in SQLDatabaseChain
-GHSA-q84m-rmw3-4382  # langchain-core SQL injection
-GHSA-f4xh-jxp9-3c9g  # langchain-core arbitrary code
+CVE-2025-2828
+CVE-2025-6984
+CVE-2025-68664
+CVE-2025-65106
 
-# python-jose - JWT vulnerabilities (plan: migrate to PyJWT)
-CVE-2024-33664   # ECDSA signature malleability
-CVE-2024-33663   # Denial of service via ECDSA
+# LiteLLM - multiple vulnerabilities, requires major upgrade
+CVE-2024-5751
+CVE-2024-10188
+CVE-2024-6587
+CVE-2024-8984
+CVE-2024-9606
+CVE-2025-0628
 
-# python-multipart - upgrade to 0.0.18+ when ready
-CVE-2024-53498   # DoS via Content-Disposition header
+# MCP SDK - upgrade required
+CVE-2025-53365
+CVE-2025-53366
+CVE-2025-66416
 
-# orjson - upgrade to 3.10.0+ when ready  
-CVE-2024-27454   # Integer overflow in JSON parsing
+# python-multipart - upgrade to 0.0.18+
+CVE-2024-53981

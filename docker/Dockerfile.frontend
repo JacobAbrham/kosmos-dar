@@ -13,7 +13,8 @@ WORKDIR /app
 COPY implementation/frontend/package.json implementation/frontend/package-lock.json* ./
 
 # Force install all deps including devDependencies (needed for build)
-RUN npm ci --include=dev
+# Using npm install instead of npm ci for cross-platform npm version compatibility
+RUN npm install
 
 # -----------------------------------------------------------------------------
 # Stage 2: Builder

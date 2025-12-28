@@ -1,0 +1,59 @@
+# Prometheus Configuration for KOSMOS V2.0
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'kosmos-monitor'
+
+# Alerting configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Rule files
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # KOSMOS Backend
+  - job_name: 'kosmos-backend'
+    static_configs:
+      - targets: ['backend:8000']
+    metrics_path: /metrics
+    scheme: http
+
+  # NATS
+  - job_name: 'nats'
+    static_configs:
+      - targets: ['nats:8222']
+    metrics_path: /metrics
+
+  # Dragonfly/Redis
+  - job_name: 'dragonfly'
+    static_configs:
+      - targets: ['dragonfly:6379']
+
+  # PostgreSQL (via postgres_exporter if enabled)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+
+  # LiteLLM
+  - job_name: 'litellm'
+    static_configs:
+      - targets: ['litellm:4000']
+    metrics_path: /metrics
+
+  # MinIO
+  - job_name: 'minio'
+    static_configs:
+      - targets: ['minio:9000']
+    metrics_path: /minio/v2/metrics/cluster

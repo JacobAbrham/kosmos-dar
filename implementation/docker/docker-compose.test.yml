@@ -1,0 +1,224 @@
+# KOSMOS V2.0 Docker Compose - Testing Configuration
+# Run: docker-compose -f docker-compose.test.yml up -d
+
+version: "3.9"
+
+services:
+  # ==========================================================================
+  # Test Database
+  # ==========================================================================
+
+  postgres-test:
+    image: pgvector/pgvector:pg16
+    container_name: kosmos-postgres-test
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=kosmos_test
+      - POSTGRES_PASSWORD=kosmos_test
+      - POSTGRES_DB=kosmos_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks:
+      - kosmos-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kosmos_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # Test Cache
+  # ==========================================================================
+
+  redis-test:
+    image: redis:7-alpine
+    container_name: kosmos-redis-test
+    ports:
+      - "6380:6379"
+    networks:
+      - kosmos-test-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # Test Runner
+  # ==========================================================================
+
+  test-runner:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+      target: development
+    container_name: kosmos-test-runner
+    environment:
+      - DATABASE_URL=postgresql://kosmos_test:kosmos_test@postgres-test:5432/kosmos_test
+      - REDIS_URL=redis://redis-test:6379/0
+      - ENVIRONMENT=test
+      - DEBUG=true
+      - PYTHONPATH=/app
+    volumes:
+      - ../backend:/app
+      - test-coverage:/app/coverage
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    networks:
+      - kosmos-test-network
+    command: >
+      sh -c "
+        pip install pytest pytest-asyncio pytest-cov pytest-xdist &&
+        pytest tests/ -v --cov=. --cov-report=html:/app/coverage --cov-report=xml:/app/coverage/coverage.xml -n auto
+      "
+
+  # ==========================================================================
+  # Unit Tests
+  # ==========================================================================
+
+  unit-tests:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+      target: development
+    container_name: kosmos-unit-tests
+    environment:
+      - ENVIRONMENT=test
+      - DEBUG=true
+      - PYTHONPATH=/app
+    volumes:
+      - ../backend:/app
+    networks:
+      - kosmos-test-network
+    command: >
+      sh -c "
+        pip install pytest pytest-asyncio pytest-cov &&
+        pytest tests/test_core tests/test_agents -v -m unit --cov=core --cov=agents --cov-report=term-missing
+      "
+
+  # ==========================================================================
+  # Integration Tests
+  # ==========================================================================
+
+  integration-tests:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+      target: development
+    container_name: kosmos-integration-tests
+    environment:
+      - DATABASE_URL=postgresql://kosmos_test:kosmos_test@postgres-test:5432/kosmos_test
+      - REDIS_URL=redis://redis-test:6379/0
+      - ENVIRONMENT=test
+      - DEBUG=true
+      - PYTHONPATH=/app
+    volumes:
+      - ../backend:/app
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    networks:
+      - kosmos-test-network
+    command: >
+      sh -c "
+        pip install pytest pytest-asyncio pytest-cov &&
+        pytest tests/integration -v -m integration --cov=. --cov-report=term-missing
+      "
+
+  # ==========================================================================
+  # API Tests
+  # ==========================================================================
+
+  api-tests:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+      target: development
+    container_name: kosmos-api-tests
+    environment:
+      - DATABASE_URL=postgresql://kosmos_test:kosmos_test@postgres-test:5432/kosmos_test
+      - REDIS_URL=redis://redis-test:6379/0
+      - ENVIRONMENT=test
+      - DEBUG=true
+      - PYTHONPATH=/app
+    volumes:
+      - ../backend:/app
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    networks:
+      - kosmos-test-network
+    command: >
+      sh -c "
+        pip install pytest pytest-asyncio httpx &&
+        pytest tests/test_api -v -m api
+      "
+
+  # ==========================================================================
+  # Load Tests
+  # ==========================================================================
+
+  load-tests:
+    image: locustio/locust:latest
+    container_name: kosmos-load-tests
+    ports:
+      - "8089:8089"
+    volumes:
+      - ../backend/tests/load:/mnt/locust
+    environment:
+      - LOCUST_HOST=http://backend-test:8000
+    depends_on:
+      - backend-test
+    networks:
+      - kosmos-test-network
+    command: -f /mnt/locust/locustfile.py
+
+  # ==========================================================================
+  # Backend for Load Testing
+  # ==========================================================================
+
+  backend-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+      target: development
+    container_name: kosmos-backend-test
+    ports:
+      - "8001:8000"
+    environment:
+      - DATABASE_URL=postgresql://kosmos_test:kosmos_test@postgres-test:5432/kosmos_test
+      - REDIS_URL=redis://redis-test:6379/0
+      - ENVIRONMENT=test
+      - DEBUG=false
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    networks:
+      - kosmos-test-network
+
+# ==========================================================================
+# Networks
+# ==========================================================================
+
+networks:
+  kosmos-test-network:
+    driver: bridge
+    name: kosmos-test-network
+
+# ==========================================================================
+# Volumes
+# ==========================================================================
+
+volumes:
+  test-coverage:
+    name: kosmos-test-coverage

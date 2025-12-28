@@ -1,0 +1,448 @@
+# KOSMOS V2.0 Frontend Deployment
+# Next.js frontend with SDUI components
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kosmos-frontend
+  namespace: kosmos
+  labels:
+    app.kubernetes.io/name: kosmos-frontend
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: kosmos-aeos
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kosmos-frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kosmos-frontend
+        app.kubernetes.io/component: frontend
+    spec:
+      serviceAccountName: kosmos-frontend
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: kosmos-frontend
+                topologyKey: kubernetes.io/hostname
+
+      containers:
+        - name: frontend
+          image: kosmos/frontend:latest
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+
+          envFrom:
+            - configMapRef:
+                name: kosmos-config
+            - configMapRef:
+                name: kosmos-frontend-config
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: next-cache
+              mountPath: /app/.next/cache
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: next-cache
+          emptyDir: {}
+
+      imagePullSecrets:
+        - name: kosmos-registry
+
+---
+# Service Account for Frontend
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kosmos-frontend
+  namespace: kosmos
+  labels:
+    app.kubernetes.io/name: kosmos-frontend
+
+---
+# Pod Disruption Budget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kosmos-frontend-pdb
+  namespace: kosmos
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kosmos-frontend
+
+---
+# MCP Gateway Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-gateway
+  namespace: kosmos
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/component: mcp-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mcp-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mcp-gateway
+        app.kubernetes.io/component: mcp-gateway
+    spec:
+      serviceAccountName: mcp-gateway
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+
+      containers:
+        - name: mcp-gateway
+          image: kosmos/mcp-gateway:latest
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 9000
+
+          envFrom:
+            - configMapRef:
+                name: kosmos-mcp-config
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+      imagePullSecrets:
+        - name: kosmos-registry
+
+---
+# MCP Gateway Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mcp-gateway
+  namespace: kosmos
+
+---
+# PostgreSQL MCP Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-mcp
+  namespace: kosmos
+  labels:
+    app.kubernetes.io/name: postgres-mcp
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-mcp
+        app.kubernetes.io/component: mcp
+    spec:
+      containers:
+        - name: postgres-mcp
+          image: kosmos/postgres-mcp:latest
+
+          ports:
+            - containerPort: 9001
+
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: kosmos-secrets
+                  key: DATABASE_URL
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 1Gi
+
+---
+# Redis MCP Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-mcp
+  namespace: kosmos
+  labels:
+    app.kubernetes.io/name: redis-mcp
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis-mcp
+        app.kubernetes.io/component: mcp
+    spec:
+      containers:
+        - name: redis-mcp
+          image: kosmos/redis-mcp:latest
+
+          ports:
+            - containerPort: 9002
+
+          env:
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: kosmos-secrets
+                  key: REDIS_URL
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 1Gi
+
+---
+# GitHub MCP Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-mcp
+  namespace: kosmos
+  labels:
+    app.kubernetes.io/name: github-mcp
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: github-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: github-mcp
+        app.kubernetes.io/component: mcp
+    spec:
+      containers:
+        - name: github-mcp
+          image: kosmos/github-mcp:latest
+
+          ports:
+            - containerPort: 9003
+
+          envFrom:
+            - secretRef:
+                name: github-mcp-secret
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 1Gi
+
+---
+# Slack MCP Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slack-mcp
+  namespace: kosmos
+  labels:
+    app.kubernetes.io/name: slack-mcp
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: slack-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: slack-mcp
+        app.kubernetes.io/component: mcp
+    spec:
+      containers:
+        - name: slack-mcp
+          image: kosmos/slack-mcp:latest
+
+          ports:
+            - containerPort: 9004
+
+          envFrom:
+            - secretRef:
+                name: slack-mcp-secret
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 1Gi
+
+---
+# Email MCP Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: email-mcp
+  namespace: kosmos
+  labels:
+    app.kubernetes.io/name: email-mcp
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: email-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: email-mcp
+        app.kubernetes.io/component: mcp
+    spec:
+      containers:
+        - name: email-mcp
+          image: kosmos/email-mcp:latest
+
+          ports:
+            - containerPort: 9005
+
+          envFrom:
+            - secretRef:
+                name: email-mcp-secret
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 1Gi
+
+---
+# Google Calendar MCP Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gcal-mcp
+  namespace: kosmos
+  labels:
+    app.kubernetes.io/name: gcal-mcp
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gcal-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gcal-mcp
+        app.kubernetes.io/component: mcp
+    spec:
+      containers:
+        - name: gcal-mcp
+          image: kosmos/gcal-mcp:latest
+
+          ports:
+            - containerPort: 9006
+
+          envFrom:
+            - secretRef:
+                name: gcal-mcp-secret
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 1Gi

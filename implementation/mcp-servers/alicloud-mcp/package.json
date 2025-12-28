@@ -1,0 +1,32 @@
+{
+  "name": "@kosmos/alicloud-mcp",
+  "version": "1.0.0",
+  "description": "Alibaba Cloud MCP Server for KOSMOS - Alibaba Cloud integration",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "@alicloud/ecs20140526": "^4.0.0",
+    "@alicloud/oss20190517": "^3.0.0",
+    "@alicloud/rds20140815": "^3.0.0",
+    "@alicloud/slb20140515": "^4.0.0",
+    "@alicloud/vpc20160428": "^3.0.0",
+    "@alicloud/alidns20150109": "^3.0.0",
+    "@alicloud/cdn20180510": "^4.0.0",
+    "@alicloud/dysmsapi20170525": "^3.0.0",
+    "@alicloud/bssopenapi20171214": "^3.0.0",
+    "@alicloud/openapi-client": "^0.4.0",
+    "@alicloud/tea-util": "^1.4.0",
+    "ali-oss": "^6.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.0"
+  }
+}

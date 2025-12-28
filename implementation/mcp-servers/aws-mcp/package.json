@@ -1,0 +1,30 @@
+{
+  "name": "@kosmos/aws-mcp",
+  "version": "1.0.0",
+  "description": "AWS MCP Server for KOSMOS - Amazon Web Services integration",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "@aws-sdk/client-s3": "^3.400.0",
+    "@aws-sdk/client-ec2": "^3.400.0",
+    "@aws-sdk/client-lambda": "^3.400.0",
+    "@aws-sdk/client-dynamodb": "^3.400.0",
+    "@aws-sdk/client-sqs": "^3.400.0",
+    "@aws-sdk/client-sns": "^3.400.0",
+    "@aws-sdk/client-iam": "^3.400.0",
+    "@aws-sdk/client-cloudwatch": "^3.400.0",
+    "@aws-sdk/client-ecs": "^3.400.0",
+    "@aws-sdk/client-rds": "^3.400.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.0"
+  }
+}

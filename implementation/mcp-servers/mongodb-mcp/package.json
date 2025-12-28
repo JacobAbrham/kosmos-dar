@@ -1,0 +1,24 @@
+{
+  "name": "@kosmos/mongodb-mcp",
+  "version": "1.0.0",
+  "description": "MongoDB MCP Server - Document database operations for KOSMOS agents",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "mongodb": "^6.3.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.2",
+    "tsx": "^4.6.0",
+    "vitest": "^1.0.0"
+  }
+}

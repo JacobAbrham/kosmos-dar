@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ..:/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME:-kosmos}:cached
+      - node_modules:/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME:-kosmos}/implementation/frontend/node_modules
+      - venv:/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME:-kosmos}/implementation/backend/.venv
+    command: sleep infinity
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DATABASE_URL=postgresql://kosmos:kosmos_dev@db:5432/kosmos_db
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/workspaces/${LOCAL_WORKSPACE_FOLDER_BASENAME:-kosmos}/implementation/backend
+    networks:
+      - kosmos-network
+
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../implementation/backend/migrations/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      POSTGRES_USER: kosmos
+      POSTGRES_PASSWORD: kosmos_dev
+      POSTGRES_DB: kosmos_db
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kosmos -d kosmos_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kosmos-network
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kosmos-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@kosmos.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - db
+    networks:
+      - kosmos-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  pgadmin_data:
+  node_modules:
+  venv:
+
+networks:
+  kosmos-network:
+    driver: bridge

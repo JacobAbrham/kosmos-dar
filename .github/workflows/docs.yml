@@ -1,0 +1,146 @@
+name: Deploy Documentation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs-site/**'
+      - 'docs/**'
+      - 'implementation/**/*.py'    # Python agent/backend changes
+      - 'implementation/**/*.ts'    # TypeScript MCP server changes
+      - 'implementation/**/*.sql'   # Database schema changes
+      - 'scripts/docs/**'           # Doc generation scripts
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'docs-site/**'
+      - 'docs/**'
+      - 'implementation/**'
+      - 'scripts/docs/**'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Job 1: Generate documentation from code
+  generate-docs:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate all documentation
+        run: python scripts/docs/generate-all.py
+
+      - name: Upload generated docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-docs
+          path: docs-site/docs/
+          retention-days: 1
+
+  # Job 2: Build Docusaurus site
+  build:
+    name: Build Documentation Site
+    runs-on: ubuntu-latest
+    needs: generate-docs
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download generated docs
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-docs
+          path: docs-site/docs/
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: docs-site/package-lock.json
+
+      - name: Install dependencies
+        working-directory: docs-site
+        run: npm ci --legacy-peer-deps
+
+      - name: Build documentation site
+        working-directory: docs-site
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-build
+          path: docs-site/build/
+          retention-days: 1
+
+  # Job 3: Deploy to Cloudflare Pages
+  deploy:
+    name: Deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-build
+          path: build/
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy build/ --project-name=kosmos-docs
+
+  # Job 4: Preview deployment for PRs
+  preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      deployments: write
+      pull-requests: write
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-build
+          path: build/
+
+      - name: Deploy Preview to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        id: deploy
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy build/ --project-name=kosmos-docs --branch=${{ github.head_ref }}
+
+      - name: Comment PR with preview URL
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 📚 Documentation Preview\n\nPreview URL: ${{ steps.deploy.outputs.deployment-url }}\n\nThis preview will be available until the PR is closed.`
+            })

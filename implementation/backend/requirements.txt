@@ -1,0 +1,81 @@
+# =============================================================================
+# KOSMOS V2.0 Backend Dependencies
+# =============================================================================
+
+# Core Framework
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+pydantic==2.6.1
+pydantic-settings==2.1.0
+email-validator==2.1.0.post1
+
+# Agent Framework
+langgraph==0.0.50
+langchain==0.1.9
+langchain-core==0.1.52
+langchain-community==0.0.24
+langchain-openai==0.0.6
+langchain-anthropic==0.1.1
+
+# Database
+asyncpg==0.29.0
+sqlalchemy[asyncio]==2.0.25
+alembic==1.13.1
+pgvector==0.2.5
+
+# Cache
+redis[hiredis]==5.0.1
+
+# Message Queue
+nats-py==2.7.0
+
+# Object Storage
+minio==7.2.3
+
+# HTTP Client
+httpx==0.25.2
+aiohttp==3.10.0
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
+
+# Observability
+opentelemetry-api==1.22.0
+opentelemetry-sdk==1.22.0
+opentelemetry-instrumentation-fastapi==0.43b0
+opentelemetry-exporter-otlp==1.22.0
+prometheus-client==0.19.0
+structlog==24.1.0
+langfuse==2.9.0
+
+# LLM
+litellm==1.40.0
+tiktoken==0.6.0
+# Optional (very large transitive deps via torch). If you need local embeddings,
+# install explicitly in an environment with sufficient disk/RAM.
+# sentence-transformers==2.3.1
+
+# MCP
+mcp==0.9.1
+
+# Utilities
+python-multipart==0.0.9
+python-dotenv==1.0.1
+tenacity==8.2.3
+orjson==3.9.13
+# numpy==2.0.0
+# pandas==2.2.2
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.4
+pytest-cov==4.1.0
+factory-boy==3.3.0
+
+# Development
+black==24.1.1
+isort==5.13.2
+mypy==1.8.0
+ruff==0.2.1

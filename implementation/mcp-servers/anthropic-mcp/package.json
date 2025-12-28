@@ -1,0 +1,21 @@
+{
+  "name": "@kosmos/anthropic-mcp",
+  "version": "1.0.0",
+  "description": "Anthropic MCP Server for KOSMOS - Direct Claude API access",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.10.0",
+    "@modelcontextprotocol/sdk": "^0.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.0"
+  }
+}

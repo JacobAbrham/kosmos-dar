@@ -1,0 +1,402 @@
+# KOSMOS V2.0 Security Scanning Workflow
+# Runs security scans on PRs and scheduled basis
+
+name: Security Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+jobs:
+  # ==========================================================================
+  # Dependency Scanning
+  # ==========================================================================
+  dependency-scan:
+    name: Dependency Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner (filesystem)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run OSV Scanner
+        uses: google/osv-scanner-action@v1
+        with:
+          scan-args: |-
+            --lockfile=implementation/backend/poetry.lock
+            --lockfile=implementation/frontend/package-lock.json
+            --lockfile=implementation/mcp-servers/package-lock.json
+            --format=sarif
+            --output=osv-results.sarif
+        continue-on-error: true
+
+      - name: Upload OSV scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'osv-results.sarif'
+        continue-on-error: true
+
+  # ==========================================================================
+  # Python Security Scan
+  # ==========================================================================
+  python-security:
+    name: Python Security Scan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: implementation/backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install security tools
+        run: |
+          pip install bandit safety pip-audit
+
+      - name: Run Bandit
+        run: |
+          bandit -r . -f sarif -o bandit-results.sarif || true
+
+      - name: Upload Bandit results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: implementation/backend/bandit-results.sarif
+        continue-on-error: true
+
+      - name: Run Safety check
+        run: |
+          safety check --file=requirements.txt --output=json > safety-results.json || true
+        continue-on-error: true
+
+      - name: Run pip-audit
+        run: |
+          pip-audit --format=json --output=pip-audit-results.json || true
+        continue-on-error: true
+
+      - name: Upload security artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-security-results
+          path: |
+            implementation/backend/bandit-results.sarif
+            implementation/backend/safety-results.json
+            implementation/backend/pip-audit-results.json
+
+  # ==========================================================================
+  # JavaScript/TypeScript Security Scan
+  # ==========================================================================
+  js-security:
+    name: JavaScript Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run npm audit (Frontend)
+        run: |
+          cd implementation/frontend
+          npm audit --json > npm-audit-frontend.json || true
+        continue-on-error: true
+
+      - name: Run npm audit (MCP Servers)
+        run: |
+          cd implementation/mcp-servers
+          npm audit --json > npm-audit-mcp.json || true
+        continue-on-error: true
+
+      - name: Upload audit results
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-results
+          path: |
+            implementation/frontend/npm-audit-frontend.json
+            implementation/mcp-servers/npm-audit-mcp.json
+
+  # ==========================================================================
+  # Static Application Security Testing (SAST)
+  # ==========================================================================
+  sast:
+    name: SAST Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python, javascript
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python,javascript"
+
+  # ==========================================================================
+  # Secret Scanning
+  # ==========================================================================
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Run TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
+
+  # ==========================================================================
+  # Container Security Scan
+  # ==========================================================================
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+
+    strategy:
+      matrix:
+        image:
+          - backend
+          - frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: |
+          docker build \
+            -f implementation/docker/Dockerfile.${{ matrix.image }} \
+            -t kosmos/${{ matrix.image }}:scan \
+            --target production \
+            implementation/
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'kosmos/${{ matrix.image }}:scan'
+          format: 'sarif'
+          output: 'trivy-${{ matrix.image }}.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-${{ matrix.image }}.sarif'
+
+      - name: Run Grype scanner
+        uses: anchore/scan-action@v3
+        with:
+          image: 'kosmos/${{ matrix.image }}:scan'
+          fail-build: false
+          output-format: sarif
+          output-file: grype-${{ matrix.image }}.sarif
+
+      - name: Upload Grype results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: grype-${{ matrix.image }}.sarif
+
+  # ==========================================================================
+  # Kubernetes Manifest Scanning
+  # ==========================================================================
+  k8s-scan:
+    name: Kubernetes Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Kubesec
+        uses: controlplaneio/kubesec-action@v0.0.2
+        with:
+          input: implementation/k8s/
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: implementation/k8s/
+          framework: kubernetes
+          output_format: sarif
+          output_file_path: checkov-k8s.sarif
+
+      - name: Upload Checkov results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov-k8s.sarif
+        continue-on-error: true
+
+  # ==========================================================================
+  # Infrastructure as Code Scanning
+  # ==========================================================================
+  iac-scan:
+    name: IaC Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Checkov on Docker files
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: implementation/docker/
+          framework: dockerfile
+          output_format: sarif
+          output_file_path: checkov-docker.sarif
+
+      - name: Upload Checkov Docker results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov-docker.sarif
+        continue-on-error: true
+
+      - name: Run Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: implementation/docker/Dockerfile.backend
+          format: sarif
+          output-file: hadolint-backend.sarif
+
+      - name: Upload Hadolint results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: hadolint-backend.sarif
+        continue-on-error: true
+
+  # ==========================================================================
+  # License Compliance
+  # ==========================================================================
+  license-scan:
+    name: License Compliance
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install license-checker
+        run: npm install -g license-checker
+
+      - name: Check frontend licenses
+        run: |
+          cd implementation/frontend
+          npm ci
+          license-checker --json --out licenses-frontend.json
+          license-checker --failOn "GPL-3.0;AGPL-3.0" || echo "License check found issues"
+
+      - name: Check MCP licenses
+        run: |
+          cd implementation/mcp-servers
+          npm ci
+          license-checker --json --out licenses-mcp.json
+          license-checker --failOn "GPL-3.0;AGPL-3.0" || echo "License check found issues"
+
+      - name: Upload license reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-reports
+          path: |
+            implementation/frontend/licenses-frontend.json
+            implementation/mcp-servers/licenses-mcp.json
+
+  # ==========================================================================
+  # Security Summary
+  # ==========================================================================
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs:
+      - dependency-scan
+      - python-security
+      - js-security
+      - sast
+      - secret-scan
+      - k8s-scan
+      - iac-scan
+      - license-scan
+    if: always()
+
+    steps:
+      - name: Create summary
+        run: |
+          echo "## Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scan Type | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency Scan | ${{ needs.dependency-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Python Security | ${{ needs.python-security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| JavaScript Security | ${{ needs.js-security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SAST Analysis | ${{ needs.sast.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret Scanning | ${{ needs.secret-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Kubernetes Scan | ${{ needs.k8s-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| IaC Scan | ${{ needs.iac-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| License Compliance | ${{ needs.license-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for critical failures
+        run: |
+          if [ "${{ needs.sast.result }}" == "failure" ] || \
+             [ "${{ needs.secret-scan.result }}" == "failure" ]; then
+            echo "Critical security scans failed!"
+            exit 1
+          fi
+          echo "All critical security scans passed!"

@@ -1,0 +1,20 @@
+{
+  "name": "@kosmos/dbt-mcp",
+  "version": "1.0.0",
+  "description": "dbt Cloud MCP Server for KOSMOS - Data transformation and analytics engineering",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.0"
+  }
+}

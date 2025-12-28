@@ -1,0 +1,140 @@
+# KOSMOS V2.0 MCP Server Base Dockerfile
+# Base image for all MCP (Model Context Protocol) servers
+
+# ============================================================================
+# Stage 1: Base with Node.js
+# ============================================================================
+FROM node:20-alpine AS base
+
+WORKDIR /app
+
+# Install common dependencies
+RUN apk add --no-cache \
+    curl \
+    dumb-init
+
+# Create non-root user
+RUN addgroup --system --gid 1001 mcp
+RUN adduser --system --uid 1001 mcp
+
+# ============================================================================
+# Stage 2: Dependencies Builder
+# ============================================================================
+FROM base AS deps
+
+# Copy package files
+COPY mcp-servers/package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production
+
+# ============================================================================
+# Stage 3: Production Runtime
+# ============================================================================
+FROM base AS production
+
+# Copy dependencies
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy MCP server code (will be overridden in specific server builds)
+COPY mcp-servers/ ./
+
+# Set environment
+ENV NODE_ENV=production
+ENV MCP_TRANSPORT=stdio
+
+# Change ownership
+RUN chown -R mcp:mcp /app
+
+# Switch to non-root user
+USER mcp
+
+# Health check (via process existence)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD pgrep -f "node" || exit 1
+
+# Use dumb-init for proper signal handling
+ENTRYPOINT ["dumb-init", "--"]
+
+# Default command (override in specific server builds)
+CMD ["node", "index.js"]
+
+# ============================================================================
+# Specific MCP Server Builds
+# ============================================================================
+
+# PostgreSQL MCP Server
+FROM production AS postgres-mcp
+COPY mcp-servers/postgres-mcp/ ./
+ENV MCP_SERVER_NAME=postgres-mcp
+CMD ["node", "dist/index.js"]
+
+# Redis MCP Server
+FROM production AS redis-mcp
+COPY mcp-servers/redis-mcp/ ./
+ENV MCP_SERVER_NAME=redis-mcp
+CMD ["node", "dist/index.js"]
+
+# GitHub MCP Server
+FROM production AS github-mcp
+COPY mcp-servers/github-mcp/ ./
+ENV MCP_SERVER_NAME=github-mcp
+CMD ["node", "dist/index.js"]
+
+# Slack MCP Server
+FROM production AS slack-mcp
+COPY mcp-servers/slack-mcp/ ./
+ENV MCP_SERVER_NAME=slack-mcp
+CMD ["node", "dist/index.js"]
+
+# Email MCP Server
+FROM production AS email-mcp
+COPY mcp-servers/email-mcp/ ./
+ENV MCP_SERVER_NAME=email-mcp
+CMD ["node", "dist/index.js"]
+
+# Google Calendar MCP Server
+FROM production AS gcal-mcp
+COPY mcp-servers/gcal-mcp/ ./
+ENV MCP_SERVER_NAME=gcal-mcp
+CMD ["node", "dist/index.js"]
+
+# Filesystem MCP Server
+FROM production AS filesystem-mcp
+COPY mcp-servers/filesystem-mcp/ ./
+ENV MCP_SERVER_NAME=filesystem-mcp
+CMD ["node", "dist/index.js"]
+
+# Docker MCP Server
+FROM production AS docker-mcp
+# Need Docker CLI for this server
+USER root
+RUN apk add --no-cache docker-cli
+USER mcp
+COPY mcp-servers/docker-mcp/ ./
+ENV MCP_SERVER_NAME=docker-mcp
+CMD ["node", "dist/index.js"]
+
+# Stripe MCP Server
+FROM production AS stripe-mcp
+COPY mcp-servers/stripe-mcp/ ./
+ENV MCP_SERVER_NAME=stripe-mcp
+CMD ["node", "dist/index.js"]
+
+# Notion MCP Server
+FROM production AS notion-mcp
+COPY mcp-servers/notion-mcp/ ./
+ENV MCP_SERVER_NAME=notion-mcp
+CMD ["node", "dist/index.js"]
+
+# Linear MCP Server
+FROM production AS linear-mcp
+COPY mcp-servers/linear-mcp/ ./
+ENV MCP_SERVER_NAME=linear-mcp
+CMD ["node", "dist/index.js"]
+
+# WhatsApp MCP Server
+FROM production AS whatsapp-mcp
+COPY mcp-servers/whatsapp-mcp/ ./
+ENV MCP_SERVER_NAME=whatsapp-mcp
+CMD ["node", "dist/index.js"]

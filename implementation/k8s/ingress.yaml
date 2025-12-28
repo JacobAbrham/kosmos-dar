@@ -1,0 +1,206 @@
+# KOSMOS V2.0 Kubernetes Ingress Configuration
+# Uses NGINX Ingress Controller with cert-manager for TLS
+
+---
+# Main Ingress for Frontend and API
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kosmos-ingress
+  namespace: kosmos
+  labels:
+    app.kubernetes.io/name: kosmos
+    app.kubernetes.io/part-of: kosmos-aeos
+  annotations:
+    # NGINX Ingress Controller
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+
+    # WebSocket support
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-rpm: "1000"
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';" always;
+
+    # TLS with cert-manager
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/acme-challenge-type: http01
+
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - app.kosmos.io
+        - api.kosmos.io
+      secretName: kosmos-tls
+
+  rules:
+    # Frontend
+    - host: app.kosmos.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
+
+    # Backend API
+    - host: api.kosmos.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+
+---
+# WebSocket Ingress (separate for sticky sessions)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kosmos-websocket-ingress
+  namespace: kosmos
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+    # WebSocket configuration
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+
+    # Session affinity for WebSocket connections
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/affinity-mode: "persistent"
+    nginx.ingress.kubernetes.io/session-cookie-name: "kosmos-ws-affinity"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - ws.kosmos.io
+      secretName: kosmos-ws-tls
+
+  rules:
+    - host: ws.kosmos.io
+      http:
+        paths:
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+
+---
+# MCP Gateway Ingress (internal only)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kosmos-mcp-ingress
+  namespace: kosmos
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+    # Whitelist internal IPs only
+    nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - mcp.kosmos.io
+      secretName: kosmos-mcp-tls
+
+  rules:
+    - host: mcp.kosmos.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-gateway
+                port:
+                  number: 9000
+
+---
+# ClusterIssuer for Let's Encrypt (cert-manager)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@kosmos.io
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+
+---
+# ClusterIssuer for Let's Encrypt Staging (for testing)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@kosmos.io
+    privateKeySecretRef:
+      name: letsencrypt-staging-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+
+---
+# Middleware for authentication (Traefik alternative)
+# This is for reference if using Traefik instead of NGINX
+# apiVersion: traefik.containo.us/v1alpha1
+# kind: Middleware
+# metadata:
+#   name: kosmos-auth
+#   namespace: kosmos
+# spec:
+#   forwardAuth:
+#     address: http://backend:8000/auth/verify
+#     trustForwardHeader: true
+#     authResponseHeaders:
+#       - X-User-Id
+#       - X-Tenant-Id

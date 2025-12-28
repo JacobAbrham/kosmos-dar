@@ -1,0 +1,104 @@
+# ============================================================================
+# KOSMOS CI Pipeline
+# Runs on every PR and push to develop/staging/main
+# ============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [develop, staging, main]
+  pull_request:
+    branches: [develop, staging, main]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Frontend Checks
+  # --------------------------------------------------------------------------
+  frontend:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: implementation/frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: implementation/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Build
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: implementation/frontend/.next
+          retention-days: 7
+
+  # --------------------------------------------------------------------------
+  # Docker Build Test
+  # --------------------------------------------------------------------------
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.frontend
+          push: false
+          tags: kosmos-frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # --------------------------------------------------------------------------
+  # Security Scan
+  # --------------------------------------------------------------------------
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true

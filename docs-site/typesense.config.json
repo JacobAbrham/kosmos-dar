@@ -1,0 +1,35 @@
+{
+  "index_name": "kosmos-docs",
+  "start_urls": ["https://docs.nuvanta-holding.com/"],
+  "selectors": {
+    "lvl0": {
+      "selector": ".menu__link--sublist.menu__link--active",
+      "global": true,
+      "default_value": "Documentation"
+    },
+    "lvl1": "article h1",
+    "lvl2": "article h2",
+    "lvl3": "article h3",
+    "lvl4": "article h4",
+    "content": "article p, article li, article td",
+    "code": "article pre code"
+  },
+  "strip_chars": " .,;:#",
+  "custom_settings": {
+    "separatorsToIndex": "_",
+    "attributesForFaceting": ["type", "lang"],
+    "attributesToRetrieve": [
+      "hierarchy",
+      "content",
+      "anchor",
+      "url",
+      "type"
+    ]
+  },
+  "conversation_id": ["docs"],
+  "scrape_start_urls": true,
+  "sitemap_urls": ["https://docs.nuvanta-holding.com/sitemap.xml"],
+  "sitemap_alternate_links": true,
+  "stop_urls": ["/blog/tags/", "/search"],
+  "nb_hits": 25000
+}

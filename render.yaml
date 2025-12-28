@@ -1,0 +1,110 @@
+# KOSMOS AEOS - Render Blueprint
+# https://render.com/docs/blueprint-spec
+
+services:
+  # Backend API Service
+  - type: web
+    name: kosmos-backend
+    runtime: python
+    region: oregon
+    plan: starter
+    buildCommand: |
+      cd implementation/backend
+      pip install -r requirements.txt
+    startCommand: |
+      cd implementation/backend
+      uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kosmos-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: kosmos-redis
+          type: redis
+          property: connectionString
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://kosmos-frontend.onrender.com
+
+  # Frontend Service
+  - type: web
+    name: kosmos-frontend
+    runtime: node
+    region: oregon
+    plan: starter
+    buildCommand: |
+      cd implementation/frontend
+      npm install
+      npm run build
+    startCommand: |
+      cd implementation/frontend
+      npm run start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          name: kosmos-backend
+          type: web
+          property: url
+
+  # Background Worker
+  - type: worker
+    name: kosmos-worker
+    runtime: python
+    region: oregon
+    plan: starter
+    buildCommand: |
+      cd implementation/backend
+      pip install -r requirements.txt
+    startCommand: |
+      cd implementation/backend
+      python -m celery -A workers.celery_app worker --loglevel=info
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kosmos-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: kosmos-redis
+          type: redis
+          property: connectionString
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+
+databases:
+  - name: kosmos-db
+    databaseName: kosmos
+    user: kosmos
+    plan: starter
+    region: oregon
+    postgresMajorVersion: 15
+    ipAllowList: []
+
+# Redis is a paid add-on on Render
+# For free tier, use Railway or Upstash Redis
+# - type: redis
+#   name: kosmos-redis
+#   plan: starter
+#   region: oregon
+#   maxmemoryPolicy: allkeys-lru

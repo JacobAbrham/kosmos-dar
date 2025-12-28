@@ -1,0 +1,382 @@
+# KOSMOS V2.0 Test Workflow
+# Runs on all PRs and pushes to main
+
+name: Test
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'implementation/backend/**'
+      - 'implementation/frontend/**'
+      - 'implementation/mcp-servers/**'
+      - '.github/workflows/test.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'implementation/backend/**'
+      - 'implementation/frontend/**'
+      - 'implementation/mcp-servers/**'
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+  POSTGRES_USER: kosmos_test
+  POSTGRES_PASSWORD: kosmos_test
+  POSTGRES_DB: kosmos_test
+
+jobs:
+  # ==========================================================================
+  # Backend Tests
+  # ==========================================================================
+  backend-lint:
+    name: Backend Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: implementation/backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.8.0
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: implementation/backend/.venv
+          key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root
+
+      - name: Run Ruff linter
+        run: poetry run ruff check .
+
+      - name: Run Ruff formatter check
+        run: poetry run ruff format --check .
+
+      - name: Run mypy type checking
+        run: poetry run mypy . --ignore-missing-imports
+
+  backend-unit-tests:
+    name: Backend Unit Tests
+    runs-on: ubuntu-latest
+    needs: backend-lint
+    defaults:
+      run:
+        working-directory: implementation/backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.8.0
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: implementation/backend/.venv
+          key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run unit tests
+        run: |
+          poetry run pytest tests/test_core tests/test_agents \
+            -v \
+            -m unit \
+            --cov=core \
+            --cov=agents \
+            --cov-report=xml \
+            --cov-report=html \
+            --junitxml=junit.xml
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./implementation/backend/coverage.xml
+          flags: backend-unit
+          name: backend-unit-coverage
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-unit-test-results
+          path: |
+            implementation/backend/junit.xml
+            implementation/backend/htmlcov/
+
+  backend-integration-tests:
+    name: Backend Integration Tests
+    runs-on: ubuntu-latest
+    needs: backend-lint
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: implementation/backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.8.0
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: implementation/backend/.venv
+          key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run database migrations
+        run: poetry run alembic upgrade head
+        env:
+          DATABASE_URL: postgresql://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
+
+      - name: Run integration tests
+        run: |
+          poetry run pytest tests/integration \
+            -v \
+            -m integration \
+            --cov=. \
+            --cov-report=xml \
+            --junitxml=junit-integration.xml
+        env:
+          DATABASE_URL: postgresql://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
+          REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: test
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./implementation/backend/coverage.xml
+          flags: backend-integration
+          name: backend-integration-coverage
+
+  # ==========================================================================
+  # Frontend Tests
+  # ==========================================================================
+  frontend-lint:
+    name: Frontend Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: implementation/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: implementation/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run TypeScript check
+        run: npm run type-check
+
+      - name: Run Prettier check
+        run: npm run format:check
+
+  frontend-unit-tests:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-latest
+    needs: frontend-lint
+    defaults:
+      run:
+        working-directory: implementation/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: implementation/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test -- --coverage --watchAll=false
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./implementation/frontend/coverage/lcov.info
+          flags: frontend-unit
+          name: frontend-coverage
+
+  frontend-e2e-tests:
+    name: Frontend E2E Tests
+    runs-on: ubuntu-latest
+    needs: frontend-lint
+    defaults:
+      run:
+        working-directory: implementation/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: implementation/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Build frontend
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+
+      - name: Run Playwright tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: implementation/frontend/playwright-report/
+
+  # ==========================================================================
+  # MCP Server Tests
+  # ==========================================================================
+  mcp-tests:
+    name: MCP Server Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: implementation/mcp-servers
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: implementation/mcp-servers/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run TypeScript check
+        run: npm run type-check
+
+      - name: Run tests
+        run: npm test
+
+  # ==========================================================================
+  # Test Summary
+  # ==========================================================================
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs:
+      - backend-unit-tests
+      - backend-integration-tests
+      - frontend-unit-tests
+      - frontend-e2e-tests
+      - mcp-tests
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          if [ "${{ needs.backend-unit-tests.result }}" != "success" ] || \
+             [ "${{ needs.backend-integration-tests.result }}" != "success" ] || \
+             [ "${{ needs.frontend-unit-tests.result }}" != "success" ] || \
+             [ "${{ needs.frontend-e2e-tests.result }}" != "success" ] || \
+             [ "${{ needs.mcp-tests.result }}" != "success" ]; then
+            echo "Some tests failed!"
+            exit 1
+          fi
+          echo "All tests passed!"

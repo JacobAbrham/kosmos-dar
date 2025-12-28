@@ -1,0 +1,205 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* KOSMOS Color Palette */
+  --kosmos-primary: #6366f1;
+  --kosmos-secondary: #8b5cf6;
+  --kosmos-accent: #f59e0b;
+  --kosmos-success: #10b981;
+  --kosmos-warning: #f59e0b;
+  --kosmos-error: #ef4444;
+
+  /* Agent Colors */
+  --agent-zeus: #ffd700;
+  --agent-hermes: #4ade80;
+  --agent-aegis: #ef4444;
+  --agent-athena: #8b5cf6;
+  --agent-chronos: #3b82f6;
+  --agent-hephaestus: #f97316;
+  --agent-prometheus: #14b8a6;
+  --agent-iris: #ec4899;
+  --agent-memorix: #06b6d4;
+  --agent-hestia: #84cc16;
+  --agent-morpheus: #a855f7;
+
+  /* Workspace Shell (UII) */
+  --ws-shell-bg: #0a0a0f;
+  --ws-dock-bg: #111118;
+  --ws-canvas-bg: #0d0d14;
+  --ws-overlay-bg: rgba(17, 17, 24, 0.95);
+  
+  /* Panels */
+  --panel-border: rgba(255, 255, 255, 0.06);
+  --panel-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --panel-blur: 20px;
+  
+  /* Intent Colors */
+  --intent-communication: #22c55e;
+  --intent-analysis: #8b5cf6;
+  --intent-scheduling: #3b82f6;
+  --intent-development: #f97316;
+  --intent-documentation: #06b6d4;
+  
+  /* Animations */
+  --transition-panel: 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  --transition-morph: 300ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@layer base {
+  * {
+    @apply border-gray-800;
+  }
+
+  body {
+    @apply bg-gray-950 text-gray-100;
+  }
+
+  /* Prevent text selection on UI elements */
+  .workspace-shell button,
+  .workspace-shell nav {
+    user-select: none;
+  }
+}
+
+@layer components {
+  .glassmorphism {
+    @apply bg-gray-900/50 backdrop-blur-xl border border-gray-800/50 rounded-xl;
+  }
+
+  .agent-card {
+    @apply glassmorphism p-4 hover:border-gray-700 transition-all duration-200;
+  }
+
+  .command-input {
+    @apply w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3
+           text-gray-100 placeholder-gray-500
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent;
+  }
+
+  .btn-primary {
+    @apply bg-indigo-600 hover:bg-indigo-700 text-white font-medium
+           px-4 py-2 rounded-lg transition-colors duration-200;
+  }
+
+  .btn-secondary {
+    @apply bg-gray-800 hover:bg-gray-700 text-gray-100 font-medium
+           px-4 py-2 rounded-lg transition-colors duration-200;
+  }
+
+  /* UII Panel Styles */
+  .uii-panel {
+    @apply bg-[var(--ws-overlay-bg)] border border-white/[0.06] rounded-xl;
+    backdrop-filter: blur(var(--panel-blur));
+    box-shadow: var(--panel-shadow);
+  }
+
+  .uii-overlay {
+    @apply fixed z-50;
+    transition: var(--transition-panel);
+  }
+
+  /* Intent indicator badges */
+  .intent-badge {
+    @apply px-2 py-0.5 rounded text-[10px] font-medium;
+  }
+
+  .intent-badge.communication { @apply bg-green-500/20 text-green-400; }
+  .intent-badge.analysis { @apply bg-purple-500/20 text-purple-400; }
+  .intent-badge.scheduling { @apply bg-blue-500/20 text-blue-400; }
+  .intent-badge.development { @apply bg-orange-500/20 text-orange-400; }
+  .intent-badge.documentation { @apply bg-cyan-500/20 text-cyan-400; }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
+
+/* Thin scrollbar for panels */
+.workspace-shell ::-webkit-scrollbar {
+  width: 6px;
+}
+
+/* Agent status indicators */
+.agent-status {
+  @apply w-2 h-2 rounded-full;
+}
+
+.agent-status.ready {
+  @apply bg-green-500 shadow-green-500/50 shadow-sm;
+}
+
+.agent-status.processing {
+  @apply bg-yellow-500 shadow-yellow-500/50 shadow-sm animate-pulse;
+}
+
+.agent-status.error {
+  @apply bg-red-500 shadow-red-500/50 shadow-sm;
+}
+
+/* Typing indicator animation */
+@keyframes typing {
+  0%, 60%, 100% { opacity: 0.3; }
+  30% { opacity: 1; }
+}
+
+.typing-dot {
+  animation: typing 1.4s infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* Focus mode vignette */
+@keyframes focusPulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}
+
+.focus-mode-active {
+  animation: focusPulse 4s ease-in-out infinite;
+}
+
+/* Canvas transition */
+.canvas-enter {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.canvas-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: var(--transition-morph);
+}
+
+.canvas-exit {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.canvas-exit-active {
+  opacity: 0;
+  transform: translateX(-20px);
+  transition: var(--transition-morph);
+}

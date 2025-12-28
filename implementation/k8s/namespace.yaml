@@ -1,0 +1,107 @@
+# KOSMOS V2.0 Kubernetes Namespace Configuration
+# Creates isolated namespace with resource quotas and network policies
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kosmos
+  labels:
+    app.kubernetes.io/name: kosmos
+    app.kubernetes.io/part-of: kosmos-aeos
+    environment: production
+
+---
+# Resource Quota for the namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: kosmos-quota
+  namespace: kosmos
+spec:
+  hard:
+    requests.cpu: "20"
+    requests.memory: 40Gi
+    limits.cpu: "40"
+    limits.memory: 80Gi
+    persistentvolumeclaims: "20"
+    pods: "100"
+    services: "20"
+    secrets: "50"
+    configmaps: "50"
+
+---
+# Limit Range for default resource limits
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: kosmos-limits
+  namespace: kosmos
+spec:
+  limits:
+    - default:
+        cpu: "1"
+        memory: 1Gi
+      defaultRequest:
+        cpu: "100m"
+        memory: 256Mi
+      max:
+        cpu: "4"
+        memory: 8Gi
+      min:
+        cpu: "50m"
+        memory: 64Mi
+      type: Container
+
+---
+# Network Policy - Default deny all ingress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: kosmos
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# Network Policy - Allow internal communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-internal
+  namespace: kosmos
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: kosmos-aeos
+
+---
+# Network Policy - Allow ingress to frontend and backend
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-public-ingress
+  namespace: kosmos
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - frontend
+          - backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from: []
+      ports:
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 8000

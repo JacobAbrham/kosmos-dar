@@ -1,9 +1,6 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
-
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
   title: 'KOSMOS - AI-Native Enterprise Platform',
@@ -32,7 +29,7 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/favicon.ico" sizes="any" />
       </head>
-      <body className={`${inter.className} ${inter.variable} antialiased overflow-hidden`}>
+      <body className="font-sans antialiased overflow-hidden">
         <Providers>{children}</Providers>
       </body>
     </html>

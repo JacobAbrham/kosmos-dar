@@ -20,23 +20,34 @@ _js: Optional[JetStreamContext] = None
 
 
 async def init_nats() -> None:
-    """Initialize NATS connection."""
+    """Initialize NATS connection (optional - skipped if NATS_URL not configured)."""
     global _client, _js
+
+    # Skip NATS if not configured or disabled
+    if not settings.nats_url or settings.nats_url == "nats://localhost:4222":
+        logger.warning("NATS not configured - skipping NATS initialization. Inter-agent messaging will be disabled.")
+        return
+
     logger.info("Initializing NATS connection...")
 
-    _client = await nats.connect(
-        servers=[settings.nats_url],
-        reconnect_time_wait=2,
-        max_reconnect_attempts=10,
-    )
+    try:
+        _client = await nats.connect(
+            servers=[settings.nats_url],
+            reconnect_time_wait=2,
+            max_reconnect_attempts=3,  # Reduced for faster startup failure
+        )
 
-    # Initialize JetStream
-    _js = _client.jetstream()
+        # Initialize JetStream
+        _js = _client.jetstream()
 
-    # Create streams for KOSMOS
-    await _create_streams()
+        # Create streams for KOSMOS
+        await _create_streams()
 
-    logger.info("NATS connection established")
+        logger.info("NATS connection established")
+    except Exception as e:
+        logger.warning(f"NATS connection failed - continuing without messaging: {e}")
+        _client = None
+        _js = None
 
 
 async def _create_streams() -> None:

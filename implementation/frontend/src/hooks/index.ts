@@ -25,3 +25,6 @@ export * from './useIntent';
 // Keyboard Shortcuts Hook
 export * from './useKeyboardShortcuts';
 export { default as useKeyboardShortcuts } from './useKeyboardShortcuts';
+
+// Agent Execution Hook (Jotai)
+export * from './useAgentExecution';

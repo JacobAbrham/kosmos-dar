@@ -98,10 +98,21 @@ db-migrate:
 	cd implementation/backend && alembic upgrade head
 
 db-rollback:
-	cd implementation/backend && alembic downgrade -1
+	@echo "Usage: make db-rollback REVISION=-1"
+	@echo "Or: make db-rollback REVISION=base"
+	cd implementation/backend && alembic downgrade $(REVISION)
+
+db-current:
+	cd implementation/backend && alembic current
+
+db-history:
+	cd implementation/backend && alembic history
 
 db-shell:
 	docker compose exec postgres psql -U kosmos -d kosmos
+
+db-test-migrations:
+	cd implementation/backend && pytest tests/test_migrations.py -v -m migration
 
 # --------------------------------------------------------------------------
 # Utilities

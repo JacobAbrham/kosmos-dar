@@ -1,6 +1,6 @@
-# KOSMOS AEOS Deployment Guide
+# KOSMOS DAR Deployment Guide
 
-Quick-start guide for deploying KOSMOS to staging/production.
+Quick-start guide for deploying KOSMOS to different environments.
 
 ## Deployment Options
 
@@ -10,10 +10,11 @@ Quick-start guide for deploying KOSMOS to staging/production.
 | **Railway** | ✅ | ✅ | ✅ PostgreSQL + Redis | Development/Staging |
 | **Fly.io** | ✅ | ❌ | ✅ PostgreSQL | Backend-only |
 | **Vercel** | ❌ | ✅ | - | Frontend-only |
+| **Docker Compose** | ✅ | ✅ | ✅ PostgreSQL | Self-hosted, Local Development |
 
 ## Quick Deploy
 
-### Option 1: Render (Recommended)
+### Option 1: Render (Recommended for Production)
 
 1. Fork this repository
 2. Go to [Render Dashboard](https://dashboard.render.com)
@@ -54,7 +55,7 @@ railway up
 ### Option 3: Docker Compose (Self-Hosted)
 
 ```bash
-cd implementation/docker
+cd implementation
 
 # Development
 docker-compose up -d
@@ -92,6 +93,8 @@ docker-compose -f docker-compose.prod.yml up -d
 
 ## Staging Deployment
 
+See [Staging Deployment Guide](staging.md) for detailed staging deployment instructions.
+
 ### GitHub Actions (K8s)
 
 Push to `staging` branch triggers automatic deployment:
@@ -105,18 +108,9 @@ Requires GitHub Secrets:
 - `KUBE_CONFIG_STAGING` - Base64 encoded kubeconfig
 - `SLACK_WEBHOOK_URL` - (optional) For notifications
 
-### Manual Deployment
+## Production Deployment
 
-```bash
-# Backend
-cd implementation/backend
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8000
-
-# Frontend
-cd implementation/frontend
-npm install && npm run build && npm start
-```
+See [Production Deployment Guide](production.md) for detailed production setup instructions.
 
 ## Health Checks
 
@@ -125,11 +119,6 @@ npm install && npm run build && npm start
 | `/health` | GET | `{"status": "healthy"}` |
 | `/ready` | GET | `{"ready": true, ...}` |
 | `/api/v1/agents` | GET | List of agents |
-
-## Demo Credentials
-
-- Email: `demo@kosmos.io`
-- Password: `demo123`
 
 ## Architecture
 
@@ -164,3 +153,14 @@ npm install && npm run build && npm start
 - Check `NEXT_PUBLIC_WS_URL` matches backend
 - Verify no proxy blocking WebSocket upgrade
 - Check browser console for errors
+
+## Related Documentation
+
+- [Production Setup](production.md) - Production server configuration
+- [Staging Deployment](staging.md) - Staging environment setup
+- [Database Migration Guide](../database/migration-guide.md) - Database setup and migrations
+
+---
+
+**Last Updated:** January 2026  
+**Version:** 2.0

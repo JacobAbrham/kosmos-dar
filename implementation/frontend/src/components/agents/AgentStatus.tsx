@@ -3,11 +3,13 @@
 /**
  * KOSMOS AEOS Agent Status
  * Real-time agent status indicators and health display
+ * Enhanced with Jotai for real-time execution progress, tool calls, and cost tracking
  */
 
 import React from 'react';
 import { useAgentContext } from '@/context/AgentContext';
 import { Agent, AgentStatus as AgentStatusType, AgentHealth, AgentRole } from '@/services/agent.service';
+import { useAgentExecutionStatus, useAgentCostTracking, useAgentToolCalls } from '@/hooks/useAgentExecution';
 
 // Status configurations
 const statusConfig: Record<AgentStatusType, {
@@ -153,6 +155,11 @@ export function AgentStatusCard({
   const { getAgent, getAgentHealth } = useAgentContext();
   const agent = getAgent(agentId);
   const health = getAgentHealth(agentId);
+  
+  // Real-time execution status from Jotai
+  const { executionStatus, isRunning, progress, currentStep } = useAgentExecutionStatus(agentId);
+  const { cost, tokens } = useAgentCostTracking(agentId);
+  const { activeToolCalls, activeCount } = useAgentToolCalls(agentId);
 
   if (!agent) return null;
 
@@ -190,6 +197,48 @@ export function AgentStatusCard({
           <h3 className="font-semibold text-gray-900 dark:text-white">{agent.name}</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{agent.role}</p>
         </div>
+
+        {/* Real-time execution progress */}
+        {isRunning && executionStatus && (
+          <div className="space-y-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500 dark:text-gray-400">Execution Progress</span>
+              <span className="font-medium text-gray-700 dark:text-gray-300">{progress}%</span>
+            </div>
+            <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            {currentStep && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                {currentStep}
+              </p>
+            )}
+            {activeCount > 0 && (
+              <p className="text-xs text-blue-600 dark:text-blue-400">
+                {activeCount} tool call{activeCount !== 1 ? 's' : ''} active
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Real-time cost tracking */}
+        {isRunning && cost > 0 && (
+          <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between text-sm mb-1">
+              <span className="text-gray-500 dark:text-gray-400">Cost</span>
+              <span className="font-medium text-gray-700 dark:text-gray-300">
+                ${cost.toFixed(4)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+              <span>Tokens: {tokens.total.toLocaleString()}</span>
+              <span>({tokens.input.toLocaleString()} in / {tokens.output.toLocaleString()} out)</span>
+            </div>
+          </div>
+        )}
 
         {/* Health metrics */}
         {showHealth && health && (

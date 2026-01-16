@@ -21,6 +21,12 @@ from core.tool_registry import (
     ToolCategory,
     get_tool_registry
 )
+from core.dependencies import (
+    get_service_context_dep,
+    get_agent_service_dependency
+)
+from services.agent_service import AgentService
+from services.base import ServiceContext
 
 router = APIRouter(prefix="/api/v1/agents", tags=["agents"])
 
@@ -91,23 +97,28 @@ async def get_registry() -> GlobalToolRegistry:
 
 @router.get("/", response_model=List[AgentDefinition])
 async def list_agents(
-    intent_router: IntentRouter = Depends(get_router)
+    request: Request,
+    agent_service: AgentService = Depends(get_agent_service_dependency),
+    include_stats: bool = Query(False, description="Include agent statistics"),
 ):
     """
     List all registered agents and their capabilities.
+
+    Uses AgentService for clean separation of concerns.
     """
-    agents = intent_router.get_all_agents()
+    ctx = ServiceContext.from_request(request)
+    agents = await agent_service.list_agents(ctx, include_stats=include_stats)
 
     return [
         AgentDefinition(
-            id=agent.agent_id,
-            name=agent.name,
-            domain=agent.domain,
-            description=agent.description,
-            tool_categories=[c.value for c in agent.tool_categories],
-            primary_mcp_servers=agent.primary_mcp_servers,
-            fallback_mcp_servers=agent.fallback_mcp_servers,
-            tools_count=len(intent_router.get_agent_tools(agent.agent_id))
+            id=agent["id"],
+            name=agent["name"],
+            domain=agent["domain"],
+            description=agent["description"],
+            tool_categories=agent["tool_categories"],
+            primary_mcp_servers=[],  # TODO: Add to service response
+            fallback_mcp_servers=[],  # TODO: Add to service response
+            tools_count=agent["tools_count"]
         )
         for agent in agents
     ]
@@ -116,22 +127,25 @@ async def list_agents(
 @router.get("/{agent_id}", response_model=AgentDefinition)
 async def get_agent(
     agent_id: str,
-    intent_router: IntentRouter = Depends(get_router)
+    request: Request,
+    agent_service: AgentService = Depends(get_agent_service_dependency),
 ):
     """Get details for a specific agent."""
-    agent = intent_router.get_agent_capability(agent_id)
+    ctx = ServiceContext.from_request(request)
+    agent = await agent_service.get_agent(ctx, agent_id)
+    
     if not agent:
         raise HTTPException(status_code=404, detail=f"Agent not found: {agent_id}")
 
     return AgentDefinition(
-        id=agent.agent_id,
-        name=agent.name,
-        domain=agent.domain,
-        description=agent.description,
-        tool_categories=[c.value for c in agent.tool_categories],
-        primary_mcp_servers=agent.primary_mcp_servers,
-        fallback_mcp_servers=agent.fallback_mcp_servers,
-        tools_count=len(intent_router.get_agent_tools(agent.agent_id))
+        id=agent["id"],
+        name=agent["name"],
+        domain=agent["domain"],
+        description=agent["description"],
+        tool_categories=agent["tool_categories"],
+        primary_mcp_servers=[],  # TODO: Add to service response
+        fallback_mcp_servers=[],  # TODO: Add to service response
+        tools_count=agent["tools_count"]
     )
 
 

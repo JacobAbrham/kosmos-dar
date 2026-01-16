@@ -13,7 +13,14 @@ from core.config import settings
 from core.database import close_db, init_db
 from core.logging import setup_logging
 from core.messaging import close_nats, init_nats
-from core.middleware import TenantMiddleware, TracingMiddleware
+from core.middleware import (
+    TenantMiddleware,
+    TracingMiddleware,
+    MetricsMiddleware,
+    SecurityHeadersMiddleware,
+    InputValidationMiddleware,
+    RateLimitMiddleware,
+)
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
@@ -72,13 +79,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Custom middleware
+# Custom middleware (order matters - first added is outermost)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(InputValidationMiddleware)
+app.add_middleware(RateLimitMiddleware, default_limit="100/minute")
+app.add_middleware(MetricsMiddleware)  # Metrics collection
 app.add_middleware(TenantMiddleware)
 app.add_middleware(TracingMiddleware)
 
 # Mount Prometheus metrics
 metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)
+
+# Initialize custom metrics
+from core.metrics import system_info  # noqa: E402, F401
 
 # Include API routers (prefix already in each router)
 app.include_router(api_v1_router)

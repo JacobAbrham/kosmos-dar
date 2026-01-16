@@ -26,37 +26,93 @@ services:
       - kosmos-net
 
   # --------------------------------------------------------------------------
-  # Backend (FastAPI) - Placeholder
+  # Backend (FastAPI)
   # --------------------------------------------------------------------------
   backend:
-    image: python:3.11-slim
-    working_dir: /app
-    command: >
-      sh -c "pip install fastapi uvicorn && 
-             echo 'from fastapi import FastAPI; app = FastAPI(); 
-             @app.get(\"/api/v1/health\") 
-             def health(): return {\"status\": \"ok\"}' > main.py && 
-             uvicorn main:app --host 0.0.0.0 --port 8000"
+    build:
+      context: ./implementation/backend
+      dockerfile: ../docker/Dockerfile.backend
     ports:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql+asyncpg://kosmos:kosmos_dev_password@postgres:5432/kosmos
+      - REDIS_URL=redis://redis:6379/0
+      - NATS_URL=nats://nats:4222
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=kosmos
+      - MINIO_SECRET_KEY=kosmos_dev_password
+      - ZITADEL_DOMAIN=http://zitadel:8080
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-key-change-in-production}
+      - LANGFUSE_HOST=http://langfuse:3000
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    volumes:
+      - ./implementation/backend:/app:ro
     networks:
       - kosmos-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # --------------------------------------------------------------------------
+  # Worker (ARQ Background Jobs)
+  # --------------------------------------------------------------------------
+  worker:
+    build:
+      context: ./implementation/backend
+      dockerfile: ../docker/Dockerfile.backend
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql+asyncpg://kosmos:kosmos_dev_password@postgres:5432/kosmos
+      - REDIS_URL=redis://redis:6379/1
+      - NATS_URL=nats://nats:4222
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=kosmos
+      - MINIO_SECRET_KEY=kosmos_dev_password
+      - ZITADEL_DOMAIN=http://zitadel:8080
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-key-change-in-production}
+      - LANGFUSE_HOST=http://langfuse:3000
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+    command: ["arq", "workers.worker.WorkerConfig"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    volumes:
+      - ./implementation/backend:/app:ro
+    networks:
+      - kosmos-net
+    restart: unless-stopped
 
   # --------------------------------------------------------------------------
   # PostgreSQL
   # --------------------------------------------------------------------------
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     ports:
       - "5432:5432"
     environment:
       POSTGRES_USER: kosmos
       POSTGRES_PASSWORD: kosmos_dev_password
       POSTGRES_DB: kosmos
+      POSTGRES_MULTIPLE_DATABASES: zitadel,langfuse,litellm
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres-init.sh:/docker-entrypoint-initdb.d/init-multiple-databases.sh:ro
     networks:
       - kosmos-net
     healthcheck:
@@ -80,9 +136,170 @@ services:
       timeout: 5s
       retries: 5
 
+  # --------------------------------------------------------------------------
+  # Dragonfly (High-performance Redis alternative)
+  # --------------------------------------------------------------------------
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    ports:
+      - "6380:6379"
+    command: ["--logtostderr"]
+    networks:
+      - kosmos-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # NATS (Messaging for inter-agent communication)
+  # --------------------------------------------------------------------------
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"  # Client connections
+      - "8222:8222"  # HTTP monitoring
+      - "6222:6222"  # Cluster routing
+    command: ["-js", "-m", "8222"]  # Enable JetStream and monitoring
+    networks:
+      - kosmos-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # MinIO (S3-compatible object storage)
+  # --------------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
+    environment:
+      MINIO_ROOT_USER: kosmos
+      MINIO_ROOT_PASSWORD: kosmos_dev_password
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - kosmos-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # --------------------------------------------------------------------------
+  # Zitadel (Identity & Access Management)
+  # --------------------------------------------------------------------------
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:latest
+    ports:
+      - "8080:8080"
+    environment:
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER: kosmos
+      ZITADEL_DATABASE_POSTGRES_PASSWORD: kosmos_dev_password
+      ZITADEL_DATABASE_POSTGRES_SSL_MODE: disable
+      ZITADEL_EXTERNALPORT: 8080
+      ZITADEL_EXTERNALDOMAIN: localhost:8080
+      ZITADEL_DEFAULTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: zitadel-admin
+      ZITADEL_DEFAULTINSTANCE_ORG_MACHINE_MACHINE_NAME: zitadel-admin
+      ZITADEL_DEFAULTINSTANCE_ORG_MACHINE_MACHINEKEY_TYPE: 1
+      ZITADEL_DEFAULTINSTANCE_ORG_MACHINE_MACHINEKEY_EXPIRY: 365d
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - kosmos-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/debug/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # --------------------------------------------------------------------------
+  # Prometheus (Metrics Collection)
+  # --------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./implementation/infrastructure/docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./implementation/infrastructure/docker/prometheus-rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - kosmos-net
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Grafana (Dashboards & Visualization)
+  # --------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: false
+      GF_SERVER_ROOT_URL: http://localhost:3001
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./implementation/infrastructure/docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./implementation/infrastructure/docker/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - kosmos-net
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Langfuse (LLM Observability & Tracing)
+  # --------------------------------------------------------------------------
+  langfuse:
+    image: langfuse/langfuse:latest
+    ports:
+      - "3003:3000"
+    environment:
+      DATABASE_URL: postgresql://kosmos:kosmos_dev_password@postgres:5432/langfuse
+      NEXTAUTH_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
+      NEXTAUTH_URL: http://localhost:3003
+      SALT: ${JWT_SECRET:-dev-secret-key-change-in-production}
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - kosmos-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/public/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 networks:
   kosmos-net:
     driver: bridge
 
 volumes:
   postgres_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:

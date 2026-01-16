@@ -92,7 +92,13 @@ class TestCircuitBreaker:
     def test_opens_after_failure_threshold(self, circuit_breaker_config):
         """Test that circuit opens after reaching failure threshold."""
         from core.circuit_breaker import CircuitBreaker, CircuitState
-        cb = CircuitBreaker(name="test-service", config=circuit_breaker_config)
+        cb = CircuitBreaker(
+            name="test-service",
+            failure_threshold=circuit_breaker_config.failure_threshold,
+            success_threshold=circuit_breaker_config.success_threshold,
+            recovery_timeout=circuit_breaker_config.recovery_timeout,
+            half_open_max_calls=circuit_breaker_config.half_open_max_calls,
+        )
 
         # Record failures up to threshold
         for _ in range(circuit_breaker_config.failure_threshold):
@@ -103,7 +109,13 @@ class TestCircuitBreaker:
     def test_rejects_requests_when_open(self, circuit_breaker_config):
         """Test that requests are rejected when circuit is open."""
         from core.circuit_breaker import CircuitBreaker, CircuitState
-        cb = CircuitBreaker(name="test-service", config=circuit_breaker_config)
+        cb = CircuitBreaker(
+            name="test-service",
+            failure_threshold=circuit_breaker_config.failure_threshold,
+            success_threshold=circuit_breaker_config.success_threshold,
+            recovery_timeout=circuit_breaker_config.recovery_timeout,
+            half_open_max_calls=circuit_breaker_config.half_open_max_calls,
+        )
 
         # Force open state
         for _ in range(circuit_breaker_config.failure_threshold):
@@ -112,22 +124,22 @@ class TestCircuitBreaker:
         assert cb.state == CircuitState.OPEN
         assert cb.allow_request() is False
 
-    def test_transitions_to_half_open_after_timeout(self, circuit_breaker_config):
+    def test_transitions_to_half_open_after_timeout(self):
         """Test that circuit transitions to half-open after recovery timeout."""
-        from core.circuit_breaker import CircuitBreaker, CircuitState, CircuitBreakerConfig
+        from core.circuit_breaker import CircuitBreaker, CircuitState
         from datetime import timedelta
 
         # Use very short timeout for test
-        config = CircuitBreakerConfig(
+        cb = CircuitBreaker(
+            name="test-service",
             failure_threshold=3,
             success_threshold=2,
             recovery_timeout=timedelta(milliseconds=10),
-            half_open_max_calls=2
+            half_open_max_calls=2,
         )
-        cb = CircuitBreaker(name="test-service", config=config)
 
         # Force open state
-        for _ in range(config.failure_threshold):
+        for _ in range(3):
             cb.record_failure()
 
         assert cb.state == CircuitState.OPEN
@@ -140,21 +152,21 @@ class TestCircuitBreaker:
         cb.allow_request()
         assert cb.state == CircuitState.HALF_OPEN
 
-    def test_closes_after_success_threshold_in_half_open(self, circuit_breaker_config):
+    def test_closes_after_success_threshold_in_half_open(self):
         """Test that circuit closes after success threshold in half-open."""
-        from core.circuit_breaker import CircuitBreaker, CircuitState, CircuitBreakerConfig
+        from core.circuit_breaker import CircuitBreaker, CircuitState
         from datetime import timedelta
 
-        config = CircuitBreakerConfig(
+        cb = CircuitBreaker(
+            name="test-service",
             failure_threshold=3,
             success_threshold=2,
             recovery_timeout=timedelta(milliseconds=1),
-            half_open_max_calls=3
+            half_open_max_calls=3,
         )
-        cb = CircuitBreaker(name="test-service", config=config)
 
         # Force open state
-        for _ in range(config.failure_threshold):
+        for _ in range(3):
             cb.record_failure()
 
         # Wait and transition to half-open
@@ -163,26 +175,26 @@ class TestCircuitBreaker:
         cb.allow_request()
 
         # Record successes in half-open
-        for _ in range(config.success_threshold):
+        for _ in range(2):
             cb.record_success()
 
         assert cb.state == CircuitState.CLOSED
 
-    def test_reopens_on_failure_in_half_open(self, circuit_breaker_config):
+    def test_reopens_on_failure_in_half_open(self):
         """Test that circuit reopens on failure in half-open state."""
-        from core.circuit_breaker import CircuitBreaker, CircuitState, CircuitBreakerConfig
+        from core.circuit_breaker import CircuitBreaker, CircuitState
         from datetime import timedelta
 
-        config = CircuitBreakerConfig(
+        cb = CircuitBreaker(
+            name="test-service",
             failure_threshold=3,
             success_threshold=2,
             recovery_timeout=timedelta(milliseconds=1),
-            half_open_max_calls=3
+            half_open_max_calls=3,
         )
-        cb = CircuitBreaker(name="test-service", config=config)
 
         # Force open state
-        for _ in range(config.failure_threshold):
+        for _ in range(3):
             cb.record_failure()
 
         # Wait and transition to half-open
@@ -199,16 +211,16 @@ class TestCircuitBreaker:
 
     def test_stats_reset_on_state_change(self):
         """Test that consecutive counters reset on state change."""
-        from core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+        from core.circuit_breaker import CircuitBreaker
         from datetime import timedelta
 
-        config = CircuitBreakerConfig(
+        cb = CircuitBreaker(
+            name="test-service",
             failure_threshold=3,
             success_threshold=2,
             recovery_timeout=timedelta(milliseconds=1),
-            half_open_max_calls=3
+            half_open_max_calls=3,
         )
-        cb = CircuitBreaker(name="test-service", config=config)
 
         # Record some successes
         cb.record_success()
@@ -263,7 +275,13 @@ class TestCircuitBreakerDecorator:
         """Test that protect decorator rejects calls when circuit is open."""
         from core.circuit_breaker import CircuitBreaker, CircuitOpenError
 
-        cb = CircuitBreaker(name="test-service", config=circuit_breaker_config)
+        cb = CircuitBreaker(
+            name="test-service",
+            failure_threshold=circuit_breaker_config.failure_threshold,
+            success_threshold=circuit_breaker_config.success_threshold,
+            recovery_timeout=circuit_breaker_config.recovery_timeout,
+            half_open_max_calls=circuit_breaker_config.half_open_max_calls,
+        )
 
         @cb.protect
         async def call():
@@ -300,7 +318,7 @@ class TestCircuitBreakerRegistry:
         assert cb1 is not cb3  # Different instance
 
     def test_get_all_circuit_breakers(self):
-        """Test getting all circuit breakers."""
+        """Test getting all circuit breakers status."""
         from core.circuit_breaker import CircuitBreakerRegistry
 
         registry = CircuitBreakerRegistry()
@@ -308,11 +326,11 @@ class TestCircuitBreakerRegistry:
         registry.get_or_create("service-1")
         registry.get_or_create("service-2")
 
-        all_cbs = registry.get_all()
+        all_status = registry.get_all_status()
 
-        assert len(all_cbs) == 2
-        assert "service-1" in all_cbs
-        assert "service-2" in all_cbs
+        assert len(all_status) == 2
+        assert "service-1" in all_status
+        assert "service-2" in all_status
 
     def test_get_stats_for_all(self):
         """Test getting stats for all circuit breakers."""
@@ -326,10 +344,10 @@ class TestCircuitBreakerRegistry:
         cb1.record_success()
         cb2.record_failure()
 
-        stats = registry.get_all_stats()
+        all_status = registry.get_all_status()
 
-        assert stats["service-1"]["successful_calls"] == 1
-        assert stats["service-2"]["failed_calls"] == 1
+        assert all_status["service-1"]["stats"]["successful_calls"] == 1
+        assert all_status["service-2"]["stats"]["failed_calls"] == 1
 
 
 @pytest.mark.unit

@@ -10,6 +10,26 @@ from .circuit_breaker import CircuitBreaker, CircuitState, get_circuit_breaker_r
 from .tool_registry import GlobalToolRegistry, MCPTool, ToolCategory, get_tool_registry
 from .semantic_router import SemanticRouter, RoutingResult, RoutingContext, get_semantic_router
 from .intent_router import IntentRouter, IntentResolution, get_intent_router
+from .model_router import (
+    ModelRouter,
+    ComplexityClassifier,
+    QueryComplexity,
+    ModelTier,
+    RoutingDecision,
+    get_model_router,
+    route_and_generate,
+)
+from .cost_tracking import (
+    CostTracker,
+    CostCategory,
+    BudgetPeriod,
+    AlertLevel,
+    CostRecord,
+    BudgetStatus,
+    CostAlert,
+    get_cost_tracker,
+    record_cost,
+)
 
 __all__ = [
     "settings",
@@ -30,4 +50,20 @@ __all__ = [
     "IntentRouter",
     "IntentResolution",
     "get_intent_router",
+    "ModelRouter",
+    "ComplexityClassifier",
+    "QueryComplexity",
+    "ModelTier",
+    "RoutingDecision",
+    "get_model_router",
+    "route_and_generate",
+    "CostTracker",
+    "CostCategory",
+    "BudgetPeriod",
+    "AlertLevel",
+    "CostRecord",
+    "BudgetStatus",
+    "CostAlert",
+    "get_cost_tracker",
+    "record_cost",
 ]

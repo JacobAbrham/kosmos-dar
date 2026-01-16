@@ -1,0 +1,107 @@
+{
+  "dashboard": {
+    "title": "KOSMOS System Health",
+    "tags": ["kosmos", "system"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Backend Health",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"kosmos-backend\"}",
+            "legendFormat": "Backend"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 1, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(kosmos_api_requests_total[5m])",
+            "legendFormat": "{{method}} {{endpoint}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Request Latency (95th percentile)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(kosmos_api_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{endpoint}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+      },
+      {
+        "id": 4,
+        "title": "Error Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(kosmos_api_requests_total{status_code=~\"5..\"}[5m])",
+            "legendFormat": "{{endpoint}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+      },
+      {
+        "id": 5,
+        "title": "Database Connections",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "pg_stat_database_numbackends{datname=\"kosmos\"}",
+            "legendFormat": "Connections"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 12}
+      },
+      {
+        "id": 6,
+        "title": "NATS Health",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"nats\"}",
+            "legendFormat": "NATS"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 4, "x": 8, "y": 12}
+      },
+      {
+        "id": 7,
+        "title": "Redis Health",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"redis\"}",
+            "legendFormat": "Redis"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 4, "x": 12, "y": 12}
+      }
+    ]
+  }
+}

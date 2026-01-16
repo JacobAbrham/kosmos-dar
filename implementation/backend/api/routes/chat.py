@@ -19,6 +19,9 @@ from pydantic import BaseModel, Field
 from core.intent_router import IntentRouter, get_intent_router
 from core.semantic_router import RoutingContext
 from core.auth import get_current_user
+from core.dependencies import get_chat_service_dependency, get_service_context_dep
+from services.chat_service import ChatService
+from services.base import ServiceContext
 
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
@@ -42,40 +45,36 @@ class ChatResponse(BaseModel):
 @router.post("/", response_model=ChatResponse, include_in_schema=False)
 async def chat(
     request: ChatRequest,
-    intent_router: IntentRouter = Depends(get_intent_router),
+    http_request: Request,
+    chat_service: ChatService = Depends(get_chat_service_dependency),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ) -> ChatResponse:
     """Send a message to KOSMOS.
 
-    Note: This endpoint currently does not execute external LLM calls.
-    It resolves the user's intent to a primary agent and returns a
-    structured response for the frontend.
+    Uses ChatService for clean separation of concerns.
+    Routes intent to appropriate agent and returns structured response.
 
     Requires authentication via Bearer token.
     """
-
-    conversation_id = request.conversation_id or str(uuid4())
-    routing_context = RoutingContext(
-        conversation_id=conversation_id,
+    # Create service context from current user
+    ctx = ServiceContext(
+        tenant_id=current_user.get("tenant_id"),
         user_id=current_user.get("user_id"),
-        tenant_id=current_user.get("tenant_id")
     )
 
-    resolution = await intent_router.resolve_intent(request.message, routing_context)
-
-    intent_hint = resolution.routing_result.matched_intent_id or "unknown"
-    response_text = (
-        f"Routed your message to {resolution.agent_name} "
-        f"(intent: {intent_hint}, confidence: {resolution.routing_result.confidence:.2f}).\n\n"
-        "This environment is running in demo mode: routing + tool discovery are active, "
-        "but no external LLM response generation is configured by default."
+    # Process message through service layer
+    result = await chat_service.process_message(
+        ctx=ctx,
+        message=request.message,
+        conversation_id=request.conversation_id,
+        context=request.context,
     )
 
-    # Keep compatibility with the frontend payload shape.
+    # Return response in expected format
     return ChatResponse(
-        response=response_text,
-        primary_agent=resolution.agent_name,
-        agents_used=[resolution.agent_name],
-        cost=0.0,
-        conversation_id=conversation_id,
+        response=result["response"],
+        primary_agent=result["primary_agent"],
+        agents_used=result["agents_used"],
+        cost=result["cost"],
+        conversation_id=result["conversation_id"],
     )

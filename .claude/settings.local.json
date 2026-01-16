@@ -17,7 +17,8 @@
       "Bash(git add:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat\\(docs\\): Enable Phase 2 auto-generation from source code\n\n- Add extract-agents.py: Parses Python agent files, extracts docstrings, classes, methods\n- Add extract-config.py: Extracts Pydantic settings to environment variables docs\n- Add extract-schema.py: Parses SQL migrations to database schema docs with ER diagram\n- Add extract-mcp.py: Parses TypeScript MCP servers, extracts tool definitions\n- Add generate-all.py: Master script to run all extractors\n- Update GitHub Actions workflow to trigger on implementation changes\n- Generated docs for 14 agents, 34 config vars, 15 tables, 88 MCP servers\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git push:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(find:*)"
     ]
   }
 }

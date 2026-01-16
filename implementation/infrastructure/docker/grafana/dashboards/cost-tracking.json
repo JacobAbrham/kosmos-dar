@@ -1,0 +1,85 @@
+{
+  "dashboard": {
+    "title": "KOSMOS Cost Tracking",
+    "tags": ["kosmos", "cost"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Daily Cost Total",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(kosmos_daily_cost_total)",
+            "legendFormat": "Total"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 500, "color": "yellow"},
+                {"value": 1000, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Cost Rate (per minute)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(kosmos_llm_cost_total[1m])",
+            "legendFormat": "{{model}} - {{category}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Cost by Category",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum by (category) (kosmos_llm_cost_total)",
+            "legendFormat": "{{category}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Cost by Agent",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum by (agent_id) (kosmos_llm_cost_total)",
+            "legendFormat": "{{agent_id}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Token Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(kosmos_llm_tokens_total[5m])",
+            "legendFormat": "{{model}} - {{type}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      }
+    ]
+  }
+}

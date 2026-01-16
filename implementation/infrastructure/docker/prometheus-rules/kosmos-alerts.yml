@@ -1,0 +1,103 @@
+# Prometheus Alerting Rules for KOSMOS V2.0
+
+groups:
+  - name: kosmos_backend
+    interval: 30s
+    rules:
+      - alert: BackendDown
+        expr: up{job="kosmos-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "KOSMOS Backend is down"
+          description: "Backend service has been down for more than 1 minute"
+
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="kosmos-backend"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request latency detected"
+          description: "95th percentile latency is above 1 second"
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{job="kosmos-backend",status=~"5.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 10%"
+
+  - name: kosmos_agents
+    interval: 30s
+    rules:
+      - alert: AgentExecutionFailure
+        expr: increase(kosmos_agent_executions_failed_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High agent execution failures"
+          description: "More than 10 agent executions failed in the last 5 minutes"
+
+      - alert: AgentLatencyHigh
+        expr: histogram_quantile(0.95, rate(kosmos_agent_execution_duration_seconds_bucket[5m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High agent execution latency"
+          description: "95th percentile agent execution time is above 30 seconds"
+
+  - name: kosmos_infrastructure
+    interval: 30s
+    rules:
+      - alert: DatabaseConnectionHigh
+        expr: pg_stat_database_numbackends{datname="kosmos"} > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High database connections"
+          description: "Database connection count is above 80"
+
+      - alert: NATSDown
+        expr: up{job="nats"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "NATS messaging is down"
+          description: "NATS service has been down for more than 1 minute"
+
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis cache is down"
+          description: "Redis service has been down for more than 1 minute"
+
+  - name: kosmos_cost
+    interval: 1m
+    rules:
+      - alert: HighCostRate
+        expr: rate(kosmos_llm_cost_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High LLM cost rate detected"
+          description: "LLM cost rate is above $10 per minute"
+
+      - alert: DailyBudgetExceeded
+        expr: kosmos_daily_cost_total > 1000
+        labels:
+          severity: critical
+        annotations:
+          summary: "Daily budget exceeded"
+          description: "Daily cost has exceeded $1000"

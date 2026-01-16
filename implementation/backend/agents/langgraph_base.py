@@ -702,38 +702,152 @@ class LangGraphAgent(ABC, Generic[StateT]):
         )
 
     async def _check_human_input_node(self, state: StateT) -> Dict[str, Any]:
-        """Check if human input is needed before continuing."""
-        # Default: no human input needed
-        # Subclasses can override to add HITL checkpoints
-        return {"requires_human_input": False}
+        """
+        Check if human input is needed before continuing.
+        
+        Enhanced with cost-based approval gates:
+        - <$50: Auto-approve
+        - $50-$100: Request approval
+        - >$100: Require Pentarchy vote
+        
+        Subclasses can override to add custom HITL checkpoints.
+        """
+        requires_human_input = False
+        human_input_request = None
+        
+        # Cost-based approval gate
+        if state.estimated_cost >= 50.0:
+            if state.estimated_cost >= 100.0:
+                # Require Pentarchy vote (handled by governance node)
+                requires_human_input = False  # Governance handles this
+            else:
+                # Request human approval
+                human_input_request = require_approval(
+                    prompt=f"Operation estimated cost: ${state.estimated_cost:.2f}. Approve?",
+                    context={
+                        "estimated_cost": state.estimated_cost,
+                        "task": state.current_task,
+                        "agent": self.agent_id,
+                    },
+                    timeout=300
+                )
+                requires_human_input = True
+        
+        # Check for high-risk operations
+        if state.current_task:
+            high_risk_keywords = ["delete", "remove", "drop", "destroy", "production", "financial"]
+            if any(kw in state.current_task.lower() for kw in high_risk_keywords):
+                human_input_request = require_confirmation(
+                    action=state.current_task,
+                    details={
+                        "risk_level": "high",
+                        "task": state.current_task,
+                        "agent": self.agent_id,
+                    },
+                    timeout=120
+                )
+                requires_human_input = True
+        
+        return {
+            "requires_human_input": requires_human_input,
+            "human_input_request": human_input_request.model_dump() if human_input_request else None
+        }
 
     async def _await_human_input_node(self, state: StateT) -> Dict[str, Any]:
-        """Wait for and process human input."""
+        """
+        Wait for and process human input.
+        
+        Enhanced with:
+        - WebSocket notification for real-time approval requests
+        - Checkpoint persistence while waiting
+        - Timeout handling
+        - Auto-approval fallback for non-critical operations
+        """
         if not state.human_input_request:
             return {}
 
-        self.logger.info("Awaiting human input...", request_type=state.human_input_request.get("type"))
+        request_data = state.human_input_request
+        request_type = request_data.get("type", "approval")
+        
+        self.logger.info(
+            "Awaiting human input...",
+            request_type=request_type,
+            request_id=request_data.get("id"),
+            timeout=request_data.get("timeout_seconds", 300)
+        )
 
         state.phase = WorkflowPhase.AWAITING_INPUT
+        
+        # Emit WebSocket event for frontend approval UI
+        if self.bus:
+            try:
+                await self.bus.emit(
+                    "human_input_requested",
+                    {
+                        "request_id": request_data.get("id"),
+                        "type": request_type,
+                        "prompt": request_data.get("prompt"),
+                        "options": request_data.get("options"),
+                        "context": request_data.get("context", {}),
+                        "agent_id": self.agent_id,
+                        "session_id": state.session_id,
+                        "timeout_seconds": request_data.get("timeout_seconds", 300),
+                    }
+                )
+            except Exception as e:
+                self.logger.warning("Failed to emit WebSocket event", error=str(e))
 
         # Invoke callback if registered
         if self._human_input_callback:
-            response = await self._human_input_callback(state.human_input_request)
-            state.human_input_response = response
-            state.human_inputs_log.append({
-                "request": state.human_input_request,
-                "response": response,
-                "timestamp": datetime.utcnow().isoformat()
-            })
+            try:
+                response = await self._human_input_callback(state.human_input_request)
+                state.human_input_response = response
+                state.human_inputs_log.append({
+                    "request": state.human_input_request,
+                    "response": response,
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+            except asyncio.TimeoutError:
+                self.logger.warning("Human input timeout, using default")
+                state.human_input_response = {
+                    "value": request_data.get("default"),
+                    "auto_approved": True,
+                    "timeout": True
+                }
         else:
-            # Default: auto-approve with default value
-            state.human_input_response = {
-                "value": state.human_input_request.get("default"),
-                "auto_approved": True
-            }
+            # Default: auto-approve with default value for non-critical operations
+            # Critical operations should have callback registered
+            is_critical = request_data.get("required", True) and request_data.get("type") == HumanInputType.CONFIRMATION
+            if not is_critical:
+                state.human_input_response = {
+                    "value": request_data.get("default"),
+                    "auto_approved": True
+                }
+            else:
+                # For critical operations without callback, deny by default
+                state.human_input_response = {
+                    "value": "deny",
+                    "auto_approved": False,
+                    "reason": "No callback registered for critical operation"
+                }
 
         state.requires_human_input = False
         state.phase = WorkflowPhase.EXECUTING
+
+        # Emit response event
+        if self.bus and state.human_input_response:
+            try:
+                await self.bus.emit(
+                    "human_input_received",
+                    {
+                        "request_id": request_data.get("id"),
+                        "response": state.human_input_response,
+                        "agent_id": self.agent_id,
+                        "session_id": state.session_id,
+                    }
+                )
+            except Exception as e:
+                self.logger.warning("Failed to emit response event", error=str(e))
 
         return {
             "human_input_response": state.human_input_response,

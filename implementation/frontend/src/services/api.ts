@@ -58,6 +58,9 @@ export const getAccessToken = (): string | null => {
 export const setAccessToken = (token: string): void => {
   if (typeof window === 'undefined') return;
   localStorage.setItem(TOKEN_KEY, token);
+  // Also set cookie for middleware access
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+  document.cookie = `access_token=${token}; expires=${expiresAt.toUTCString()}; path=/; SameSite=Lax`;
 };
 
 export const getRefreshToken = (): string | null => {
@@ -68,12 +71,18 @@ export const getRefreshToken = (): string | null => {
 export const setRefreshToken = (token: string): void => {
   if (typeof window === 'undefined') return;
   localStorage.setItem(REFRESH_TOKEN_KEY, token);
+  // Also set cookie for middleware access
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+  document.cookie = `refresh_token=${token}; expires=${expiresAt.toUTCString()}; path=/; SameSite=Lax`;
 };
 
 export const clearTokens = (): void => {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
+  // Clear cookies
+  document.cookie = 'access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  document.cookie = 'refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
 };
 
 // Create Axios instance

@@ -1,16 +1,17 @@
 """Alembic environment configuration for KOSMOS V2.0"""
 
+import os
 from logging.config import fileConfig
 import asyncio
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.orm import declarative_base
 
 from alembic import context
 
-# Import your models' Base
-from core.database import Base
-from core.config import settings
+# Create a minimal Base for migrations (avoid circular imports)
+Base = declarative_base()
 
 # Alembic Config object
 config = context.config
@@ -22,8 +23,27 @@ if config.config_file_name is not None:
 # Set target metadata for autogenerate support
 target_metadata = Base.metadata
 
-# Override sqlalchemy.url with actual database URL from settings
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Get database URL from environment or use default
+database_url = os.environ.get(
+    "DATABASE_URL",
+    "postgresql+asyncpg://kosmos:kosmos_dev_password@localhost:5432/kosmos"
+)
+# Convert postgresql:// to postgresql+asyncpg:// if needed
+if database_url.startswith("postgresql://") and "+asyncpg" not in database_url:
+    database_url = database_url.replace("postgresql://", "postgresql+asyncpg://")
+
+# Handle SSL parameters for asyncpg (sslmode -> ssl)
+# asyncpg uses 'ssl' parameter instead of 'sslmode'
+if "sslmode=" in database_url:
+    database_url = database_url.replace("sslmode=require", "ssl=require")
+    database_url = database_url.replace("sslmode=prefer", "ssl=prefer")
+    database_url = database_url.replace("sslmode=disable", "ssl=disable")
+# Remove channel_binding parameter (not supported by asyncpg)
+if "channel_binding=" in database_url:
+    import re
+    database_url = re.sub(r'[&?]channel_binding=[^&]*', '', database_url)
+
+config.set_main_option("sqlalchemy.url", database_url)
 
 
 def run_migrations_offline() -> None:

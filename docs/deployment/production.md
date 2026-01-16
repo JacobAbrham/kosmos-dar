@@ -175,3 +175,8 @@ docker compose -f docker-compose.prod.yml down
 # Clean up unused images
 docker system prune -af
 ```
+
+---
+
+**Last Updated:** January 2026  
+**Version:** 2.0

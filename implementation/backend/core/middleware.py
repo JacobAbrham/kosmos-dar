@@ -1,17 +1,35 @@
 """
 KOSMOS V2.0 Middleware
+
+Enhanced with security hardening:
+- Rate limiting
+- Security headers
+- Input validation
+- CORS protection
 """
 
 import time
+import re
 from typing import Callable, Optional
 from uuid import uuid4
 
 import structlog
-from fastapi import Request, Response
+from fastapi import Request, Response, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
+from core.metrics import (
+    api_requests_total,
+    api_request_duration_seconds,
+)
+
 logger = structlog.get_logger()
+
+# Rate limiter
+limiter = Limiter(key_func=get_remote_address)
 
 
 class TenantMiddleware(BaseHTTPMiddleware):
@@ -73,6 +91,61 @@ class TenantMiddleware(BaseHTTPMiddleware):
         return None
 
 
+class MetricsMiddleware(BaseHTTPMiddleware):
+    """Middleware for Prometheus metrics collection."""
+
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: Callable
+    ) -> Response:
+        start_time = time.perf_counter()
+
+        # Extract endpoint path (remove query params)
+        path = request.url.path
+        method = request.method
+
+        # Skip metrics endpoint itself
+        if path == "/metrics":
+            return await call_next(request)
+
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            status_class = f"{status_code // 100}xx"
+
+            # Record metrics
+            latency_seconds = time.perf_counter() - start_time
+            api_requests_total.labels(
+                method=method,
+                endpoint=path,
+                status_code=status_code
+            ).inc()
+            api_request_duration_seconds.labels(
+                method=method,
+                endpoint=path
+            ).observe(latency_seconds)
+
+            return response
+
+        except Exception as e:
+            status_code = 500
+            latency_seconds = time.perf_counter() - start_time
+
+            # Record metrics for error
+            api_requests_total.labels(
+                method=method,
+                endpoint=path,
+                status_code=status_code
+            ).inc()
+            api_request_duration_seconds.labels(
+                method=method,
+                endpoint=path
+            ).observe(latency_seconds)
+
+            raise
+
+
 class TracingMiddleware(BaseHTTPMiddleware):
     """Middleware for distributed tracing."""
 
@@ -124,6 +197,147 @@ class TracingMiddleware(BaseHTTPMiddleware):
         )
 
         return response
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Middleware to add security headers to all responses."""
+
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: Callable
+    ) -> Response:
+        response = await call_next(request)
+        
+        # Security headers
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        
+        return response
+
+
+class InputValidationMiddleware(BaseHTTPMiddleware):
+    """Middleware for input validation and sanitization."""
+
+    # SQL injection patterns
+    SQL_INJECTION_PATTERNS = [
+        r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|SCRIPT)\b)",
+        r"(--|#|/\*|\*/)",
+        r"(\bOR\b.*=.*)",
+        r"(\bAND\b.*=.*)",
+    ]
+    
+    # XSS patterns
+    XSS_PATTERNS = [
+        r"<script[^>]*>.*?</script>",
+        r"javascript:",
+        r"on\w+\s*=",
+        r"<iframe[^>]*>",
+    ]
+
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: Callable
+    ) -> Response:
+        # Check query parameters
+        for param, value in request.query_params.items():
+            if self._is_malicious(str(value)):
+                logger.warning("Malicious input detected", param=param, value=value[:50])
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid input detected"
+                )
+        
+        # Check path parameters
+        for param, value in request.path_params.items():
+            if self._is_malicious(str(value)):
+                logger.warning("Malicious input detected", param=param, value=value[:50])
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid input detected"
+                )
+        
+        return await call_next(request)
+    
+    def _is_malicious(self, value: str) -> bool:
+        """Check if input contains malicious patterns."""
+        value_lower = value.lower()
+        
+        # Check SQL injection patterns
+        for pattern in self.SQL_INJECTION_PATTERNS:
+            if re.search(pattern, value_lower, re.IGNORECASE):
+                return True
+        
+        # Check XSS patterns
+        for pattern in self.XSS_PATTERNS:
+            if re.search(pattern, value_lower, re.IGNORECASE):
+                return True
+        
+        return False
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Middleware for rate limiting per user/IP."""
+
+    def __init__(self, app, default_limit: str = "100/minute"):
+        super().__init__(app)
+        self.default_limit = default_limit
+        self.cache = None
+    
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: Callable
+    ) -> Response:
+        # Skip rate limiting for health checks
+        if request.url.path in ["/health", "/healthz", "/ready"]:
+            return await call_next(request)
+        
+        # Get client identifier
+        client_id = get_remote_address(request)
+        
+        # Get user ID if authenticated
+        if hasattr(request.state, "user") and request.state.user:
+            client_id = request.state.user.get("user_id", client_id)
+        
+        # Check rate limit
+        cache = await self._get_cache()
+        rate_key = f"rate_limit:{request.url.path}:{client_id}"
+        
+        # Simple rate limiting: 100 requests per minute
+        current = await cache.incr(rate_key)
+        if current == 1:
+            await cache.expire(rate_key, 60)
+        
+        if current > 100:
+            logger.warning("Rate limit exceeded", client_id=client_id, path=request.url.path)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Rate limit exceeded. Please try again later.",
+                headers={"Retry-After": "60"}
+            )
+        
+        response = await call_next(request)
+        
+        # Add rate limit headers
+        response.headers["X-RateLimit-Limit"] = "100"
+        response.headers["X-RateLimit-Remaining"] = str(max(0, 100 - current))
+        response.headers["X-RateLimit-Reset"] = str(int(time.time()) + 60)
+        
+        return response
+    
+    async def _get_cache(self):
+        """Lazy load cache."""
+        if self.cache is None:
+            from core.cache import get_cache
+            self.cache = get_cache()
+        return self.cache
 
 
 class CostGovernanceMiddleware(BaseHTTPMiddleware):

@@ -51,6 +51,8 @@ export type WebSocketEventType =
   | 'agent:message'
   | 'agent:stream'
   | 'agent:tool_call'
+  | 'agent:cost'
+  | 'circuit_breaker:status'
   | 'task:created'
   | 'task:updated'
   | 'task:completed'

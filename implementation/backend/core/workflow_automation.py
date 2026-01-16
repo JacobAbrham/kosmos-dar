@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -544,6 +545,7 @@ class WorkflowEngine:
         trigger_info: Optional[Dict[str, Any]] = None
     ) -> WorkflowExecution:
         """Execute a workflow."""
+        start_time = time.perf_counter()
         workflow = self._workflows.get(workflow_id)
 
         if not workflow:
@@ -591,10 +593,31 @@ class WorkflowEngine:
                 execution.status = "completed"
             execution.completed_at = datetime.utcnow()
 
+            # Emit Prometheus metrics
+            duration_seconds = time.perf_counter() - start_time
+            workflow_executions_total.labels(
+                workflow_id=workflow_id,
+                status="completed"
+            ).inc()
+            workflow_execution_duration_seconds.labels(
+                workflow_id=workflow_id
+            ).observe(duration_seconds)
+
         except Exception as e:
             execution.status = "failed"
             execution.error = str(e)
             execution.completed_at = datetime.utcnow()
+
+            # Emit Prometheus metrics
+            duration_seconds = time.perf_counter() - start_time
+            workflow_executions_total.labels(
+                workflow_id=workflow_id,
+                status="failed"
+            ).inc()
+            workflow_execution_duration_seconds.labels(
+                workflow_id=workflow_id
+            ).observe(duration_seconds)
+
             logger.error(f"Workflow execution failed: {e}")
 
         return execution

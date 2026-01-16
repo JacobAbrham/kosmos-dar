@@ -1,0 +1,48 @@
+# Codecov Configuration for KOSMOS DAR
+# https://docs.codecov.com/docs/codecov-yaml
+
+codecov:
+  require_ci_to_pass: yes
+  notify:
+    wait_for_ci: yes
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+  
+  # Coverage thresholds
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 1%
+        base: auto
+    patch:
+      default:
+        target: 70%
+        threshold: 1%
+        base: auto
+
+# Ignore these files/directories in coverage
+ignore:
+  - "implementation/backend/tests/"
+  - "implementation/backend/alembic/"
+  - "implementation/backend/__pycache__/"
+  - "**/migrations/"
+  - "**/*.pyc"
+  - "**/venv/"
+  - "**/.venv/"
+
+# Flags for different parts of the codebase
+flags:
+  backend:
+    paths:
+      - implementation/backend/
+    carryforward: true
+
+# Comment on PRs
+comment:
+  layout: "reach,diff,flags,tree,reach"
+  behavior: default
+  require_changes: false

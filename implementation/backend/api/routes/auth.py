@@ -13,6 +13,9 @@ from pydantic import BaseModel, EmailStr, Field, validator
 from starlette import status
 
 from core.auth import auth_service, AuthService, get_auth_service
+from core.zitadel_auth import get_zitadel_auth, ZitadelAuth
+from core.audit_logging import get_audit_logger, AuditEventType
+from fastapi import Request
 
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -113,9 +116,14 @@ async def register(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     request: LoginRequest,
+    http_request: Request,
     auth: AuthService = Depends(get_auth_service)
 ):
     """Authenticate user and return tokens."""
+    audit_logger = await get_audit_logger()
+    ip_address = http_request.client.host if http_request.client else None
+    user_agent = http_request.headers.get("user-agent")
+    
     try:
         user = await auth.authenticate(
             email=request.email,
@@ -124,6 +132,15 @@ async def login(
         )
 
         if not user:
+            await audit_logger.log_authentication(
+                action="login_failed",
+                user_id=None,
+                success=False,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                error_message="Invalid credentials",
+                details={"email": request.email}
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
@@ -138,9 +155,29 @@ async def login(
             }
 
         tokens = auth.create_tokens(user)
+        
+        # Log successful authentication
+        await audit_logger.log_authentication(
+            action="login_success",
+            user_id=user["user_id"],
+            success=True,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            details={"email": request.email, "tenant_id": request.tenant_id}
+        )
+        
         return TokenResponse(**tokens)
 
     except ValueError as e:
+        await audit_logger.log_authentication(
+            action="login_failed",
+            user_id=None,
+            success=False,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            error_message=str(e),
+            details={"email": request.email}
+        )
         if "locked" in str(e).lower():
             raise HTTPException(
                 status_code=status.HTTP_423_LOCKED,
@@ -256,3 +293,103 @@ async def verify_token(
         )
 
     return {"valid": True, "user_id": user["user_id"]}
+
+
+# ============================================================================
+# Zitadel OAuth 2.0 Endpoints
+# ============================================================================
+
+class OAuthCallbackRequest(BaseModel):
+    """OAuth callback request."""
+    code: str
+    state: Optional[str] = None
+
+
+@router.get("/zitadel/authorize")
+async def zitadel_authorize(
+    redirect_uri: str,
+    state: Optional[str] = None,
+    scope: str = "openid profile email"
+):
+    """Get Zitadel authorization URL."""
+    zitadel_auth = get_zitadel_auth()
+    auth_url = zitadel_auth.get_authorization_url(
+        redirect_uri=redirect_uri,
+        state=state,
+        scope=scope
+    )
+    return {"authorization_url": auth_url}
+
+
+@router.post("/zitadel/callback")
+async def zitadel_callback(
+    request: OAuthCallbackRequest,
+    redirect_uri: str,
+    http_request: Request
+):
+    """Handle OAuth callback and exchange code for tokens."""
+    audit_logger = await get_audit_logger()
+    ip_address = http_request.client.host if http_request.client else None
+    
+    try:
+        zitadel_auth = get_zitadel_auth()
+        tokens = await zitadel_auth.exchange_code(
+            code=request.code,
+            redirect_uri=redirect_uri
+        )
+        
+        # Verify token to get user info
+        user_data = await zitadel_auth.verify_token(tokens["access_token"])
+        
+        # Log successful authentication
+        await audit_logger.log_authentication(
+            action="oauth_login_success",
+            user_id=user_data["user_id"],
+            success=True,
+            ip_address=ip_address,
+            details={"provider": "zitadel", "tenant_id": user_data.get("tenant_id")}
+        )
+        
+        return TokenResponse(
+            access_token=tokens["access_token"],
+            refresh_token=tokens.get("refresh_token", ""),
+            token_type=tokens.get("token_type", "bearer"),
+            expires_in=tokens.get("expires_in", 3600)
+        )
+        
+    except Exception as e:
+        await audit_logger.log_authentication(
+            action="oauth_login_failed",
+            success=False,
+            ip_address=ip_address,
+            error_message=str(e),
+            details={"provider": "zitadel"}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"OAuth callback failed: {str(e)}"
+        )
+
+
+@router.post("/zitadel/refresh")
+async def zitadel_refresh(
+    request: RefreshRequest,
+    http_request: Request
+):
+    """Refresh Zitadel access token."""
+    try:
+        zitadel_auth = get_zitadel_auth()
+        tokens = await zitadel_auth.refresh_token(request.refresh_token)
+        
+        return TokenResponse(
+            access_token=tokens["access_token"],
+            refresh_token=tokens.get("refresh_token", request.refresh_token),
+            token_type=tokens.get("token_type", "bearer"),
+            expires_in=tokens.get("expires_in", 3600)
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Token refresh failed: {str(e)}"
+        )

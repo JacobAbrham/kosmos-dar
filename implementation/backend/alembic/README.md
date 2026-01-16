@@ -1,127 +1,119 @@
-# KOSMOS V2.0 Database Migrations
+# Alembic Migrations for KOSMOS DAR
 
-This directory contains Alembic database migrations for KOSMOS V2.0.
+This directory contains Alembic database migrations for KOSMOS DAR.
 
-## Prerequisites
+## Quick Start
 
-Ensure the database is running:
+### Run Migrations
+
 ```bash
-docker-compose up -d postgres
-```
+# From project root
+make db-migrate
 
-## Common Commands
-
-### Create a New Migration
-
-Auto-generate migration from model changes:
-```bash
+# Or directly
 cd implementation/backend
-alembic revision --autogenerate -m "description of changes"
-```
-
-Create an empty migration:
-```bash
-alembic revision -m "description of changes"
-```
-
-### Apply Migrations
-
-Upgrade to the latest version:
-```bash
 alembic upgrade head
 ```
 
-Upgrade by one version:
-```bash
-alembic upgrade +1
-```
+### Check Current Revision
 
-Upgrade to a specific revision:
 ```bash
-alembic upgrade <revision_id>
+make db-current
+
+# Or directly
+cd implementation/backend
+alembic current
 ```
 
 ### Rollback Migrations
 
-Downgrade by one version:
 ```bash
+# Rollback one revision
+make db-rollback REVISION=-1
+
+# Rollback to base (removes all migrations)
+make db-rollback REVISION=base
+
+# Or directly
+cd implementation/backend
 alembic downgrade -1
-```
-
-Downgrade to a specific revision:
-```bash
-alembic downgrade <revision_id>
-```
-
-Rollback all migrations:
-```bash
-alembic downgrade base
 ```
 
 ### View Migration History
 
-Show current revision:
 ```bash
-alembic current
-```
+make db-history
 
-Show migration history:
-```bash
+# Or directly
+cd implementation/backend
 alembic history
-```
-
-Show pending migrations:
-```bash
-alembic history --verbose
 ```
 
 ## Migration Structure
 
-- `env.py` - Alembic environment configuration
-- `script.py.mako` - Template for generating migration files
-- `versions/` - Directory containing migration scripts
+The initial migration (`4f5bf96601b3_initial_schema.py`) includes:
 
-## Notes
+- **Schemas:** core, agents, governance, knowledge, audit, mcp, workflows, routing
+- **Tables:** All tables from migrations 001, 002, 003, 010, 011
+- **Indexes:** Including vector indexes (HNSW) for embeddings
+- **RLS Policies:** Multi-tenant isolation policies
+- **Functions:** Routing, workflow, and audit functions
+- **Views:** Active workflows, agent performance, tool popularity
+- **Seed Data:** Agent registry, MCP servers, intent categories
 
-- Alembic is configured to use async SQLAlchemy engine
-- Database URL is automatically loaded from `core.config.settings`
-- All migrations run within transactions
-- Type comparison and server default comparison are enabled
-- For manual schema changes, edit the SQL files in `/database/init/` (for initial setup) or create Alembic migrations (for updates)
+## Testing Migrations
 
-## Integration with Existing Schema
+Run migration tests:
 
-The KOSMOS database has an initial schema defined in `/database/init/001_initial_schema.sql`.
+```bash
+make db-test-migrations
 
-To sync Alembic with the existing schema:
+# Or directly
+cd implementation/backend
+pytest tests/test_migrations.py -v -m migration
+```
 
-1. **First time setup** (if database already exists with schema):
-   ```bash
-   alembic stamp head
-   ```
+## Creating New Migrations
 
-2. **After schema changes**, create a migration:
-   ```bash
-   alembic revision --autogenerate -m "your changes"
-   ```
+```bash
+cd implementation/backend
 
-3. **Apply the migration**:
-   ```bash
-   alembic upgrade head
-   ```
+# Auto-generate migration from model changes
+alembic revision --autogenerate -m "description"
+
+# Create empty migration
+alembic revision -m "description"
+```
+
+## Environment Variables
+
+Set `DATABASE_URL` before running migrations:
+
+```bash
+export DATABASE_URL="postgresql+asyncpg://kosmos:password@localhost:5432/kosmos"
+```
+
+Or use `.env` file in `implementation/backend/` directory.
+
+## Important Notes
+
+1. **Always backup** before running migrations in production
+2. **Test migrations** in development/staging first
+3. **Review generated migrations** before applying (especially autogenerate)
+4. **Vector indexes** require pgvector extension (already included in migration)
+5. **RLS policies** are automatically enabled on tenant-scoped tables
 
 ## Troubleshooting
 
-### Connection Issues
-- Ensure PostgreSQL is running: `docker-compose ps postgres`
-- Check connection string in `.env` file
-- Verify `DATABASE_URL` environment variable
+### Migration fails with "relation already exists"
+- Database may have been partially migrated
+- Check current revision: `alembic current`
+- Manually fix or rollback and retry
 
-### Migration Conflicts
-- If autogenerate detects unwanted changes, review and edit the migration file before applying
-- Use `alembic downgrade` to rollback if needed
+### Vector extension not found
+- Ensure PostgreSQL has pgvector extension installed
+- Migration includes `CREATE EXTENSION IF NOT EXISTS "vector"`
 
-### Schema Out of Sync
-- Compare database state: `alembic current`
-- Review pending migrations: `alembic history`
-- Stamp database if needed: `alembic stamp <revision>`
+### RLS policies not working
+- Verify policies exist: `SELECT * FROM pg_policies WHERE schemaname = 'core'`
+- Check RLS is enabled: `SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'core'`

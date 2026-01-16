@@ -18,3 +18,38 @@ export {
   selectActiveOverlays, 
   selectModalOverlays 
 } from './workspace';
+
+// Agent execution store (Jotai)
+export {
+  executionStatusAtom,
+  toolCallStatusAtom,
+  costTrackingAtom,
+  circuitBreakerStatusAtom,
+  agentActiveExecutionAtom,
+  getExecutionStatusAtom,
+  getExecutionToolCallsAtom,
+  getExecutionCostAtom,
+  getAgentActiveExecutionAtom,
+  getAgentExecutionsAtom,
+  getCircuitBreakerStatusAtom,
+  totalActiveCostAtom,
+  totalActiveTokensAtom,
+  activeToolCallsAtom,
+  failedToolCallsAtom,
+  updateExecutionStatusAtom,
+  updateToolCallStatusAtom,
+  updateCostTrackingAtom,
+  updateCircuitBreakerStatusAtom,
+  clearExecutionAtom,
+  clearCompletedExecutionsAtom,
+  updateExecutionFromWebSocket,
+  updateToolCallFromWebSocket,
+  updateCostFromWebSocket,
+  updateCircuitBreakerFromWebSocket,
+} from './agent-execution';
+export type {
+  ExecutionStatus,
+  ToolCallStatus,
+  CostTracking,
+  CircuitBreakerStatus,
+} from './agent-execution';

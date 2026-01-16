@@ -8,6 +8,7 @@
 import React, { useState } from 'react';
 import { DashboardShell } from '@/components/DashboardShell';
 import { useSDUIContext } from '@/context/SDUIContext';
+import { MFASetup } from '@/components/auth/MFASetup';
 import { Settings, Bot, Shield, Bell, Link2, Wrench } from 'lucide-react';
 
 type SettingsTab = 'general' | 'agents' | 'security' | 'notifications' | 'integrations' | 'advanced';
@@ -247,12 +248,48 @@ export default function SettingsPage() {
                 <div className="space-y-6">
                   <h2 className="text-xl font-semibold text-gray-100">Security Settings</h2>
                   <div className="space-y-4">
-                    <ToggleSetting
-                      label="Multi-Factor Authentication"
-                      description="Require MFA for all users"
-                      checked={settings.mfaEnabled}
-                      onChange={() => setSettings((prev) => ({ ...prev, mfaEnabled: !prev.mfaEnabled }))}
-                    />
+                    <div className="p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <p className="font-medium text-gray-100">Multi-Factor Authentication</p>
+                          <p className="text-sm text-gray-500">Add an extra layer of security to your account</p>
+                        </div>
+                        <button
+                          onClick={() => setSettings((prev) => ({ ...prev, mfaEnabled: !prev.mfaEnabled }))}
+                          className={`
+                            relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+                            ${settings.mfaEnabled ? 'bg-indigo-500' : 'bg-gray-600'}
+                          `}
+                        >
+                          <span
+                            className={`
+                              inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                              ${settings.mfaEnabled ? 'translate-x-6' : 'translate-x-1'}
+                            `}
+                          />
+                        </button>
+                      </div>
+                      {!settings.mfaEnabled && (
+                        <button
+                          onClick={() => setSettings((prev) => ({ ...prev, mfaEnabled: true }))}
+                          className="mt-3 w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                          Set Up MFA
+                        </button>
+                      )}
+                      {settings.mfaEnabled && (
+                        <div className="mt-4">
+                          <MFASetup
+                            onComplete={() => {
+                              setSettings((prev) => ({ ...prev, mfaEnabled: true }));
+                            }}
+                            onCancel={() => {
+                              setSettings((prev) => ({ ...prev, mfaEnabled: false }));
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-1">Session Timeout (minutes)</label>
                       <input

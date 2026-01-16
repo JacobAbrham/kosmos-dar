@@ -79,9 +79,18 @@ class Settings(BaseSettings):
     )
 
     # Observability
-    langfuse_public_key: Optional[str] = None
-    langfuse_secret_key: Optional[str] = None
-    langfuse_host: str = "http://localhost:3001"
+    langfuse_public_key: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("KOSMOS_LANGFUSE_PUBLIC_KEY", "LANGFUSE_PUBLIC_KEY"),
+    )
+    langfuse_secret_key: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("KOSMOS_LANGFUSE_SECRET_KEY", "LANGFUSE_SECRET_KEY"),
+    )
+    langfuse_host: str = Field(
+        default="http://langfuse:3000",
+        validation_alias=AliasChoices("KOSMOS_LANGFUSE_HOST", "LANGFUSE_HOST"),
+    )
     jaeger_agent_host: str = "localhost"
     jaeger_agent_port: int = 6831
 

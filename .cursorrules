@@ -1,0 +1,294 @@
+# Cursor Rules for KOSMOS DAR
+
+**Purpose:** Cursor-specific development guidelines and conventions for AI-assisted development.
+
+**Last Updated:** January 2026
+
+---
+
+## File Structure Conventions
+
+### Backend (Python)
+- **Location:** `implementation/backend/`
+- **Structure:**
+  - `core/` - Core utilities and services
+  - `agents/` - LangGraph agent implementations
+  - `api/routes/` - FastAPI route handlers
+  - `sdui/` - Server-Driven UI components
+  - `tests/` - Test files (mirror source structure)
+
+### Frontend (TypeScript/React)
+- **Location:** `implementation/frontend/`
+- **Structure:**
+  - `src/app/` - Next.js App Router pages
+  - `src/components/` - React components
+  - `src/stores/` - State management (Zustand + Jotai)
+  - `src/services/` - API service layer
+  - `src/hooks/` - Custom React hooks
+
+### MCP Servers (TypeScript)
+- **Location:** `implementation/mcp-servers/`
+- **Structure:** Each server in its own directory with `src/index.ts`
+
+---
+
+## Code Style
+
+### Python
+- **Formatter:** Black (line length: 100)
+- **Linter:** Ruff
+- **Type Checking:** mypy (strict mode)
+- **Import Order:** isort (alphabetical, grouped)
+- **Docstrings:** Google style for classes/functions
+
+**Example:**
+```python
+from typing import Optional
+
+import structlog
+from pydantic import BaseModel, Field
+
+from core.config import settings
+
+logger = structlog.get_logger()
+
+
+class MyService:
+    """Service description.
+    
+    Longer description if needed.
+    """
+    
+    async def do_something(self, param: str) -> Optional[str]:
+        """Do something with param.
+        
+        Args:
+            param: Description of param
+            
+        Returns:
+            Optional result description
+        """
+        logger.info("Doing something", param=param)
+        return None
+```
+
+### TypeScript/React
+- **Formatter:** Prettier (via ESLint)
+- **Linter:** ESLint with Next.js config
+- **Type Checking:** TypeScript strict mode
+- **Naming:** PascalCase for components, camelCase for functions/variables
+
+**Example:**
+```typescript
+import { useState } from 'react';
+
+interface MyComponentProps {
+  title: string;
+  onAction: (value: string) => void;
+}
+
+export function MyComponent({ title, onAction }: MyComponentProps) {
+  const [value, setValue] = useState('');
+  
+  return (
+    <div>
+      <h1>{title}</h1>
+      {/* Component implementation */}
+    </div>
+  );
+}
+```
+
+---
+
+## Testing Requirements
+
+### Backend
+- **Framework:** pytest with pytest-asyncio
+- **Coverage Target:** > 70% (Phase 1), > 80% (Phase 2+)
+- **Test Structure:** Mirror source structure in `tests/`
+- **Fixtures:** Use factory-boy for test data
+
+**Example:**
+```python
+import pytest
+from core.database import get_db
+
+@pytest.mark.asyncio
+async def test_my_service():
+    """Test my service functionality."""
+    async with get_db() as db:
+        # Test implementation
+        assert result is not None
+```
+
+### Frontend
+- **Unit Tests:** Vitest
+- **E2E Tests:** Playwright
+- **Coverage Target:** > 60% (Phase 1), > 70% (Phase 2+)
+- **Component Tests:** Test in `__tests__/` directories
+
+---
+
+## Code Review Checkpoints
+
+### Before Committing
+- [ ] Code formatted (Black/Ruff for Python, ESLint for TypeScript)
+- [ ] Type checking passes (mypy/TypeScript)
+- [ ] Tests pass locally
+- [ ] No secrets or credentials in code
+- [ ] Documentation updated if needed
+
+### PR Requirements
+- [ ] All tests pass in CI
+- [ ] Coverage thresholds met
+- [ ] No linting errors
+- [ ] PR description includes:
+  - What changed and why
+  - Related ACTION_PLAN.md tasks
+  - Testing performed
+  - Breaking changes (if any)
+
+---
+
+## Integration with ACTION_PLAN.md
+
+When implementing features:
+1. **Check ACTION_PLAN.md** for related tasks and requirements
+2. **Reference CLAUDE.md** for architecture decisions
+3. **Update .memory.md** with learnings and patterns discovered
+4. **Create spec** in `specs/` directory for complex features
+5. **Follow Director Model** pattern for handoffs (see `docs/DIRECTOR_MODEL.md`)
+
+---
+
+## AI Collaboration Patterns
+
+### Spec-Driven Development
+1. Create specification in `specs/` directory
+2. AI validates and enhances spec
+3. Human approves architecture
+4. AI implements with validation gates
+5. Human reviews at checkpoints
+6. AI integrates feedback
+
+### Code Generation Guidelines
+- **Always** generate tests alongside implementation
+- **Always** include type hints/TypeScript types
+- **Always** add docstrings/JSDoc comments
+- **Never** commit generated code without review
+- **Never** skip error handling
+
+### Context Sharing
+- **CLAUDE.md** - Project-wide context (read first)
+- **.memory.md** - Session learnings (update after each session)
+- **context/** - Domain-specific knowledge
+- **specs/** - Feature specifications
+
+---
+
+## Security Requirements
+
+- **Never** hardcode secrets or API keys
+- **Always** use environment variables or secrets manager
+- **Always** validate user input
+- **Always** use parameterized queries (no SQL injection)
+- **Always** sanitize outputs (prevent XSS)
+- **Always** implement rate limiting for public endpoints
+- **Always** add audit logging for sensitive operations
+
+---
+
+## Performance Guidelines
+
+- **Backend:** Use async/await for I/O operations
+- **Frontend:** Use React Server Components where possible
+- **Database:** Use connection pooling, avoid N+1 queries
+- **Caching:** Use Redis for exact cache, Qdrant for semantic cache
+- **LLM:** Use model cascading (simple → standard → complex)
+- **Monitoring:** Track latency, cost, and error rates in Langfuse
+
+---
+
+## Common Patterns
+
+### Agent Implementation
+```python
+class MyAgent(LangGraphAgent[MyState]):
+    """Agent description."""
+    
+    def __init__(self):
+        super().__init__(
+            agent_id="my_agent",
+            name="My Agent",
+            domain="domain_name",
+            description="Agent description",
+            tool_categories=[ToolCategory.RELEVANT],
+        )
+    
+    def create_state_class(self) -> Type[MyState]:
+        return MyState
+    
+    def define_nodes(self) -> Dict[str, Callable]:
+        return {
+            "my_node": self._my_node,
+        }
+    
+    def define_edges(self, workflow: StateGraph) -> None:
+        workflow.add_edge(START, "my_node")
+        workflow.add_edge("my_node", END)
+```
+
+### Frontend Component
+```typescript
+'use client';
+
+import { useAtom } from 'jotai';
+import { agentExecutionAtom } from '@/stores/agent-execution';
+
+export function MyComponent() {
+  const [execution] = useAtom(agentExecutionAtom);
+  
+  return (
+    <div>
+      {/* Component implementation */}
+    </div>
+  );
+}
+```
+
+---
+
+## File Naming Conventions
+
+- **Python:** `snake_case.py`
+- **TypeScript:** `PascalCase.tsx` for components, `camelCase.ts` for utilities
+- **Tests:** `test_*.py` (Python), `*.test.ts` or `*.spec.ts` (TypeScript)
+- **Config:** `.env`, `.env.example`, `*.config.js`
+
+---
+
+## Git Workflow
+
+- **Branch naming:** `feature/description`, `fix/description`, `docs/description`
+- **Commits:** Conventional commits format
+  - `feat:` New feature
+  - `fix:` Bug fix
+  - `docs:` Documentation
+  - `refactor:` Code refactoring
+  - `test:` Tests
+  - `chore:` Maintenance
+
+---
+
+## Resources
+
+- **Architecture:** `docs/ARCHITECTURE.md`
+- **API Reference:** `docs/API.md`
+- **Action Plan:** `ACTION_PLAN.md`
+- **Solo Developer Guide:** `Solo Developer.md`
+- **AI Context:** `CLAUDE.md`
+
+---
+
+**Remember:** When in doubt, check CLAUDE.md for architecture decisions and ACTION_PLAN.md for implementation requirements.

@@ -2,7 +2,9 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode, useState, useEffect } from 'react';
+import { Provider as JotaiProvider } from 'jotai';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { AgentExecutionSync } from '@/components/agents/AgentExecutionSync';
 
 // Lazy load context providers to handle failures gracefully
 function SafeWebSocketProvider({ children }: { children: ReactNode }) {
@@ -98,15 +100,18 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <SafeWebSocketProvider>
-          <SafeAgentProvider>
-            <SafeSDUIProvider>
-              {children}
-            </SafeSDUIProvider>
-          </SafeAgentProvider>
-        </SafeWebSocketProvider>
-      </QueryClientProvider>
+      <JotaiProvider>
+        <QueryClientProvider client={queryClient}>
+          <SafeWebSocketProvider>
+            <AgentExecutionSync />
+            <SafeAgentProvider>
+              <SafeSDUIProvider>
+                {children}
+              </SafeSDUIProvider>
+            </SafeAgentProvider>
+          </SafeWebSocketProvider>
+        </QueryClientProvider>
+      </JotaiProvider>
     </ErrorBoundary>
   );
 }

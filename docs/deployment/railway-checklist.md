@@ -6,6 +6,7 @@ Quick checklist for connecting Railway to GitHub and resolving build issues.
 
 - [x] FastAPI dependency fixed (`fastapi==0.115.6` in `requirements.txt`)
 - [x] httpx dependency fixed (`httpx>=0.27.2` in `requirements.txt`)
+- [x] langfuse dependency fixed (`langfuse>=3.0.0` in `requirements.txt`)
 - [x] Railway configuration files present (`railway.toml`, `Dockerfile`)
 - [x] Backend code pushed to GitHub repository
 
@@ -104,6 +105,11 @@ Go to Backend service → **Variables** tab:
 **If httpx version conflict:**
 - [ ] Verify `requirements.txt` has `httpx>=0.27.2` (required by fastapi-zitadel-auth 0.3.0)
 - [ ] Check that `fastapi-zitadel-auth==0.3.0` is present
+- [ ] Rebuild deployment after fixing requirements
+
+**If langfuse version conflict:**
+- [ ] Verify `requirements.txt` has `langfuse>=3.0.0` (langfuse 2.9.0 requires httpx<0.26.0 which conflicts with fastapi-zitadel-auth)
+- [ ] Check that `httpx>=0.27.2` is present
 - [ ] Rebuild deployment after fixing requirements
 
 ### Health Check Fails

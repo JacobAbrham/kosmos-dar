@@ -194,9 +194,14 @@ The Dockerfile is configured for Railway:
 - **Solution:** Updated `requirements.txt` to use `httpx>=0.27.2` (was `httpx==0.25.2`)
 - **Status:** ✅ Fixed
 
+**Issue 3:** `langfuse 2.9.0` requires `httpx<0.26.0` (conflicts with `fastapi-zitadel-auth` requirement)
+- **Solution:** Updated `requirements.txt` to use `langfuse>=3.0.0` (supports `httpx>=0.27.2`)
+- **Status:** ✅ Fixed
+
 **Current Configuration:**
 - `fastapi==0.115.6` ✅
 - `httpx>=0.27.2` ✅
+- `langfuse>=3.0.0` ✅
 - `fastapi-zitadel-auth==0.3.0` ✅
 
 All dependency conflicts resolved in `implementation/backend/requirements.txt`
@@ -242,15 +247,25 @@ The conflict is caused by:
 
 **Or:**
 ```
+ERROR: Cannot install -r requirements.txt (line 46), -r requirements.txt (line 56) and httpx>=0.27.2 because these package versions have conflicting dependencies.
+The conflict is caused by:
+    The user requested httpx>=0.27.2
+    fastapi-zitadel-auth 0.3.0 depends on httpx>=0.27.2
+    langfuse 2.9.0 depends on httpx<0.26.0 and >=0.15.4
+```
+
+**Or:**
+```
 ERROR: fastapi-zitadel-auth 0.3.0 depends on fastapi>=0.115.4
 The user requested fastapi==0.109.2
 ```
 
 **Solutions:**
 1. **httpx conflict:** Update `requirements.txt` to use `httpx>=0.27.2` (currently fixed)
-2. **FastAPI conflict:** Update `requirements.txt` to use `fastapi>=0.115.4` (currently `0.115.6`)
-3. Always check package requirements when adding new dependencies
-4. Run `pip check` locally to verify dependency compatibility before deploying
+2. **langfuse conflict:** Update `requirements.txt` to use `langfuse>=3.0.0` (langfuse 2.9.0 requires httpx<0.26.0 which conflicts with fastapi-zitadel-auth)
+3. **FastAPI conflict:** Update `requirements.txt` to use `fastapi>=0.115.4` (currently `0.115.6`)
+4. Always check package requirements when adding new dependencies
+5. Run `pip check` locally to verify dependency compatibility before deploying
 
 #### Health Check Fails
 

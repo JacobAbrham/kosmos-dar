@@ -198,10 +198,22 @@ The Dockerfile is configured for Railway:
 - **Solution:** Updated `requirements.txt` to use `langfuse>=3.0.0` (supports `httpx>=0.27.2`)
 - **Status:** ✅ Fixed
 
+**Issue 4:** `langfuse>=3.0.0` requires `opentelemetry-api>=1.33.1` (conflicts with pinned OpenTelemetry packages)
+- **Solution:** Updated OpenTelemetry packages to compatible versions:
+  - `opentelemetry-api>=1.33.1`
+  - `opentelemetry-sdk>=1.33.1`
+  - `opentelemetry-instrumentation-fastapi>=0.45b0`
+  - `opentelemetry-exporter-otlp>=1.33.1`
+- **Status:** ✅ Fixed
+
 **Current Configuration:**
 - `fastapi==0.115.6` ✅
 - `httpx>=0.27.2` ✅
 - `langfuse>=3.0.0` ✅
+- `opentelemetry-api>=1.33.1` ✅
+- `opentelemetry-sdk>=1.33.1` ✅
+- `opentelemetry-instrumentation-fastapi>=0.45b0` ✅
+- `opentelemetry-exporter-otlp>=1.33.1` ✅
 - `fastapi-zitadel-auth==0.3.0` ✅
 
 All dependency conflicts resolved in `implementation/backend/requirements.txt`
@@ -256,16 +268,26 @@ The conflict is caused by:
 
 **Or:**
 ```
+ERROR: Cannot install -r requirements.txt (line 51), -r requirements.txt (line 52), -r requirements.txt (line 56), opentelemetry-api==1.22.0, opentelemetry-exporter-otlp and opentelemetry-instrumentation-fastapi because these package versions have conflicting dependencies.
+The conflict is caused by:
+    The user requested opentelemetry-api==1.22.0
+    langfuse 3.x depends on opentelemetry-api>=1.33.1
+    opentelemetry-instrumentation-fastapi 0.43b0 depends on opentelemetry-api~=1.12
+```
+
+**Or:**
+```
 ERROR: fastapi-zitadel-auth 0.3.0 depends on fastapi>=0.115.4
 The user requested fastapi==0.109.2
 ```
 
 **Solutions:**
 1. **httpx conflict:** Update `requirements.txt` to use `httpx>=0.27.2` (currently fixed)
-2. **langfuse conflict:** Update `requirements.txt` to use `langfuse>=3.0.0` (langfuse 2.9.0 requires httpx<0.26.0 which conflicts with fastapi-zitadel-auth)
-3. **FastAPI conflict:** Update `requirements.txt` to use `fastapi>=0.115.4` (currently `0.115.6`)
-4. Always check package requirements when adding new dependencies
-5. Run `pip check` locally to verify dependency compatibility before deploying
+2. **langfuse conflict:** Update `requirements.txt` to use `langfuse>=3.0.0` (langfuse 2.9.0 requires httpx<0.26.0)
+3. **OpenTelemetry conflict:** Update OpenTelemetry packages to `>=1.33.1` (langfuse 3.x requires opentelemetry-api>=1.33.1)
+4. **FastAPI conflict:** Update `requirements.txt` to use `fastapi>=0.115.4` (currently `0.115.6`)
+5. Always check package requirements when adding new dependencies
+6. Run `pip check` locally to verify dependency compatibility before deploying
 
 #### Health Check Fails
 

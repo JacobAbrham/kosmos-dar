@@ -7,6 +7,7 @@ Quick checklist for connecting Railway to GitHub and resolving build issues.
 - [x] FastAPI dependency fixed (`fastapi==0.115.6` in `requirements.txt`)
 - [x] httpx dependency fixed (`httpx>=0.27.2` in `requirements.txt`)
 - [x] langfuse dependency fixed (`langfuse>=3.0.0` in `requirements.txt`)
+- [x] OpenTelemetry dependencies fixed (`opentelemetry-api>=1.33.1` and related packages in `requirements.txt`)
 - [x] Railway configuration files present (`railway.toml`, `Dockerfile`)
 - [x] Backend code pushed to GitHub repository
 
@@ -110,6 +111,15 @@ Go to Backend service → **Variables** tab:
 **If langfuse version conflict:**
 - [ ] Verify `requirements.txt` has `langfuse>=3.0.0` (langfuse 2.9.0 requires httpx<0.26.0 which conflicts with fastapi-zitadel-auth)
 - [ ] Check that `httpx>=0.27.2` is present
+- [ ] Rebuild deployment after fixing requirements
+
+**If OpenTelemetry version conflict:**
+- [ ] Verify `requirements.txt` has `opentelemetry-api>=1.33.1` (required by langfuse>=3.0.0)
+- [ ] Check that all OpenTelemetry packages are updated to compatible versions:
+  - [ ] `opentelemetry-api>=1.33.1`
+  - [ ] `opentelemetry-sdk>=1.33.1`
+  - [ ] `opentelemetry-instrumentation-fastapi>=0.45b0`
+  - [ ] `opentelemetry-exporter-otlp>=1.33.1`
 - [ ] Rebuild deployment after fixing requirements
 
 ### Health Check Fails

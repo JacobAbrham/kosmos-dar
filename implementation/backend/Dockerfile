@@ -34,12 +34,14 @@ RUN adduser --disabled-password --gecos '' appuser && \
     chown -R appuser:appuser /app
 USER appuser
 
-# Expose port
-EXPOSE 8000
+# Expose default port (Railway injects PORT env var)
+EXPOSE ${PORT:-8000}
 
-# Health check
+# Health check - uses PORT env var with fallback to 8000
+# Note: Railway also performs its own healthcheck via railway.toml
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD sh -c 'curl -f http://localhost:${PORT:-8000}/health || exit 1'
 
-# Run application (using python -m for better PATH resolution)
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run application - MUST use PORT env var for Railway compatibility
+# Railway injects PORT and expects the app to listen on that port
+CMD sh -c "exec python -m uvicorn main:app --host 0.0.0.0 --port \${PORT:-8000}"

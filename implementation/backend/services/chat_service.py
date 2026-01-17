@@ -8,8 +8,8 @@ import time
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from core.intent_router import IntentRouter, get_intent_router, RoutingContext
-from core.semantic_router import SemanticRouter
+from core.intent_router import IntentRouter, get_intent_router
+from core.semantic_router import SemanticRouter, RoutingContext
 from services.agent_service import AgentService, get_agent_service
 from services.base import BaseService, ServiceContext
 

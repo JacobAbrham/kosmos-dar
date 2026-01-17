@@ -44,4 +44,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Run application - MUST use PORT env var for Railway compatibility
 # Railway injects PORT and expects the app to listen on that port
-CMD sh -c "exec python -m uvicorn main:app --host 0.0.0.0 --port \${PORT:-8000}"
+# Using JSON array with sh -c ensures proper variable expansion at runtime
+CMD ["sh", "-c", "exec python -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]

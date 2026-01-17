@@ -7,7 +7,7 @@ Endpoints for agent management and capability discovery.
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Request
 from pydantic import BaseModel, Field
 
 from core.intent_router import (

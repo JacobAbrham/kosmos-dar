@@ -314,6 +314,10 @@ class AuditLogger:
 
 _audit_logger: Optional[AuditLogger] = None
 
+# Module-level instance for synchronous imports
+# This allows `from core.audit_logging import audit_logger`
+audit_logger = AuditLogger()
+
 
 async def get_audit_logger() -> AuditLogger:
     """Get audit logger singleton."""

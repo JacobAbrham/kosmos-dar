@@ -295,8 +295,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: Callable
     ) -> Response:
-        # Skip rate limiting for health checks
-        if request.url.path in ["/health", "/healthz", "/ready"]:
+        # Skip rate limiting for health checks and other critical endpoints
+        if request.url.path in ["/health", "/healthz", "/ready", "/metrics", "/"]:
             return await call_next(request)
         
         # Get client identifier
@@ -306,31 +306,41 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if hasattr(request.state, "user") and request.state.user:
             client_id = request.state.user.get("user_id", client_id)
         
-        # Check rate limit
+        # Check rate limit (skip if cache not available)
         cache = await self._get_cache()
+        if cache is None:
+            # Cache not available, skip rate limiting but log warning
+            logger.debug("Rate limiting skipped - cache not available", path=request.url.path)
+            return await call_next(request)
+        
         rate_key = f"rate_limit:{request.url.path}:{client_id}"
         
-        # Simple rate limiting: 100 requests per minute
-        current = await cache.incr(rate_key)
-        if current == 1:
-            await cache.expire(rate_key, 60)
-        
-        if current > 100:
-            logger.warning("Rate limit exceeded", client_id=client_id, path=request.url.path)
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Rate limit exceeded. Please try again later.",
-                headers={"Retry-After": "60"}
-            )
-        
-        response = await call_next(request)
-        
-        # Add rate limit headers
-        response.headers["X-RateLimit-Limit"] = "100"
-        response.headers["X-RateLimit-Remaining"] = str(max(0, 100 - current))
-        response.headers["X-RateLimit-Reset"] = str(int(time.time()) + 60)
-        
-        return response
+        try:
+            # Simple rate limiting: 100 requests per minute
+            current = await cache.incr(rate_key)
+            if current == 1:
+                await cache.expire(rate_key, 60)
+            
+            if current > 100:
+                logger.warning("Rate limit exceeded", client_id=client_id, path=request.url.path)
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Rate limit exceeded. Please try again later.",
+                    headers={"Retry-After": "60"}
+                )
+            
+            response = await call_next(request)
+            
+            # Add rate limit headers
+            response.headers["X-RateLimit-Limit"] = "100"
+            response.headers["X-RateLimit-Remaining"] = str(max(0, 100 - current))
+            response.headers["X-RateLimit-Reset"] = str(int(time.time()) + 60)
+            
+            return response
+        except Exception as e:
+            # If rate limiting fails, log and continue without rate limiting
+            logger.warning("Rate limiting error, continuing without rate limiting", error=str(e))
+            return await call_next(request)
     
     async def _get_cache(self):
         """Lazy load cache."""

@@ -5,20 +5,28 @@ Unified system that combines Semantic Router with Global Tool Registry.
 Maps user intents to appropriate agents AND their available tools.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 import structlog
-from core.semantic_router import (
-    RoutingContext,
-    RoutingMethod,
-    RoutingResult,
-    SemanticRouter,
-    get_semantic_router,
-)
+
+# NOTE: core.semantic_router imports are done lazily within methods to avoid circular imports
+# The chain: intent_router -> semantic_router -> services -> agent_service -> agents -> langgraph_base -> intent_router
+
+# Type-only imports (not evaluated at runtime)
+if TYPE_CHECKING:
+    from core.semantic_router import (
+        RoutingContext,
+        RoutingMethod,
+        RoutingResult,
+        SemanticRouter,
+    )
+
 from core.tool_registry import (
     GlobalToolRegistry,
     MCPTool,
@@ -216,6 +224,9 @@ class IntentRouter:
     async def initialize(self) -> None:
         """Initialize the intent router with semantic router and tool registry."""
         self.logger.info("Initializing Intent Router...")
+
+        # Lazy import to avoid circular dependency
+        from core.semantic_router import get_semantic_router
 
         # Initialize sub-components
         self.semantic_router = await get_semantic_router()
@@ -480,6 +491,9 @@ class IntentRouterAPI:
 
     async def route(self, request: RouteRequest) -> RouteResponse:
         """Route an intent request."""
+        # Lazy import to avoid circular dependency
+        from core.semantic_router import RoutingContext
+
         context = RoutingContext(
             tenant_id=request.tenant_id,
             user_id=request.user_id,

@@ -8,8 +8,8 @@ from .cache import get_cache
 from .messaging import get_nats
 from .circuit_breaker import CircuitBreaker, CircuitState, get_circuit_breaker_registry
 from .tool_registry import GlobalToolRegistry, MCPTool, ToolCategory, get_tool_registry
-from .semantic_router import SemanticRouter, RoutingResult, RoutingContext, get_semantic_router
-from .intent_router import IntentRouter, IntentResolution, get_intent_router
+# NOTE: semantic_router and intent_router are NOT imported here to avoid circular imports
+# Import them directly: from core.semantic_router import ... or from core.intent_router import ...
 from .model_router import (
     ModelRouter,
     ComplexityClassifier,
@@ -43,13 +43,9 @@ __all__ = [
     "MCPTool",
     "ToolCategory",
     "get_tool_registry",
-    "SemanticRouter",
-    "RoutingResult",
-    "RoutingContext",
-    "get_semantic_router",
-    "IntentRouter",
-    "IntentResolution",
-    "get_intent_router",
+    # NOTE: SemanticRouter, RoutingResult, RoutingContext, get_semantic_router
+    # and IntentRouter, IntentResolution, get_intent_router are not exported here
+    # to avoid circular imports. Import them directly from core.semantic_router or core.intent_router
     "ModelRouter",
     "ComplexityClassifier",
     "QueryComplexity",

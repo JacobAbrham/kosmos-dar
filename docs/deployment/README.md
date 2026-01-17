@@ -31,26 +31,36 @@ Quick-start guide for deploying KOSMOS to different environments.
 - `kosmos-db` - PostgreSQL 15
 - `kosmos-worker` - Celery background worker
 
-### Option 2: Railway
+### Option 2: Railway (Recommended for Staging)
 
+**⚠️ Important:** Use GitHub integration instead of CLI for reliable deployments.
+
+**Quick Setup:**
+1. Go to [Railway Dashboard](https://railway.app)
+2. Create new project → **Deploy from GitHub repo**
+3. Select repository: `JacobAbrham/kosmos-dar`
+4. Configure backend service:
+   - **Root Directory**: `implementation/backend`
+   - **Branch**: `staging`
+5. Add PostgreSQL and Redis services
+6. Set environment variables (see [Railway Guide](railway.md))
+
+**Benefits:**
+- ✅ Automatic deployments on push
+- ✅ Faster builds (5-10 min vs 15+ min with CLI)
+- ✅ More reliable than CLI uploads
+- ✅ Easy rollback via dashboard
+
+**See [Railway Deployment Guide](railway.md) for detailed instructions.**
+
+**Alternative: Railway CLI** (less reliable)
 ```bash
-# Install Railway CLI
 npm install -g @railway/cli
-
-# Login
 railway login
-
-# Initialize project
+cd implementation/backend
 railway init
-
-# Deploy
 railway up
 ```
-
-**Configure in Railway Dashboard:**
-- Add PostgreSQL plugin
-- Add Redis plugin
-- Set environment variables
 
 ### Option 3: Docker Compose (Self-Hosted)
 
@@ -156,6 +166,7 @@ See [Production Deployment Guide](production.md) for detailed production setup i
 
 ## Related Documentation
 
+- [Railway Deployment Guide](railway.md) - Complete Railway setup with GitHub integration
 - [Production Setup](production.md) - Production server configuration
 - [Staging Deployment](staging.md) - Staging environment setup
 - [Database Migration Guide](../database/migration-guide.md) - Database setup and migrations

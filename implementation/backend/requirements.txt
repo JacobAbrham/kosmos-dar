@@ -36,7 +36,7 @@ arq==0.25.0  # Async job queue with Redis/Dragonfly support
 minio==7.2.3
 
 # HTTP Client
-httpx==0.25.2
+httpx>=0.27.2  # Required by fastapi-zitadel-auth 0.3.0
 aiohttp==3.10.0
 
 # Authentication

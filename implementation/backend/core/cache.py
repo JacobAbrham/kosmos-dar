@@ -18,20 +18,35 @@ _client: Optional[Redis] = None
 
 
 async def init_cache() -> None:
-    """Initialize cache connection."""
+    """Initialize cache connection (optional - skipped if REDIS_URL not configured)."""
     global _pool, _client
+    
+    # Skip cache if not configured or invalid URL
+    redis_url = settings.redis_url
+    if not redis_url or not redis_url.startswith(("redis://", "rediss://", "unix://")):
+        logger.warning(
+            "Redis not configured or invalid URL - skipping cache initialization. "
+            "Set REDIS_URL environment variable with format: redis://host:port"
+        )
+        return
+    
     logger.info("Initializing cache connection...")
 
-    _pool = ConnectionPool.from_url(
-        settings.redis_url,
-        max_connections=50,
-        decode_responses=True,
-    )
-    _client = Redis(connection_pool=_pool)
+    try:
+        _pool = ConnectionPool.from_url(
+            redis_url,
+            max_connections=50,
+            decode_responses=True,
+        )
+        _client = Redis(connection_pool=_pool)
 
-    # Test connection
-    await _client.ping()
-    logger.info("Cache connection established")
+        # Test connection
+        await _client.ping()
+        logger.info("Cache connection established")
+    except Exception as e:
+        logger.warning(f"Cache connection failed - continuing without cache: {e}")
+        _pool = None
+        _client = None
 
 
 async def close_cache() -> None:
@@ -59,10 +74,8 @@ async def check_cache_connection() -> bool:
         return False
 
 
-def get_cache() -> Redis:
-    """Get cache client."""
-    if _client is None:
-        raise RuntimeError("Cache not initialized")
+def get_cache() -> Optional[Redis]:
+    """Get cache client. Returns None if cache is not configured."""
     return _client
 
 

@@ -8,7 +8,7 @@ Integrates with Langfuse for metrics and provides dashboard endpoints.
 import asyncio
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 import structlog

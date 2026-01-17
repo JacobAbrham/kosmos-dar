@@ -39,8 +39,10 @@ from core.tool_registry import (
     GlobalToolRegistry, ToolCategory, MCPTool, ToolCallResult, get_tool_registry
 )
 from core.circuit_breaker import CircuitBreakerRegistry, CircuitState
-from core.semantic_router import SemanticRouter, RoutingResult, RoutingContext
 from core.intent_router import IntentRouter, IntentResolution, get_intent_router
+
+# NOTE: core.semantic_router imports are done lazily to avoid circular imports
+# The chain: langgraph_base -> semantic_router -> services -> agent_service -> agents -> langgraph_base
 
 logger = structlog.get_logger()
 
@@ -527,6 +529,8 @@ class LangGraphAgent(ABC, Generic[StateT]):
 
         # Route the intent
         if self._intent_router and state.current_task:
+            # Lazy import to avoid circular dependency
+            from core.semantic_router import RoutingContext
             context = RoutingContext(
                 session_id=state.session_id,
                 user_id=state.user_id,
